@@ -1547,13 +1547,13 @@ class DownloadGitHubPackagesClass (threading.Thread):
 		gitHubVersionNumber = VersionToNumber( gitHubVersion )
 		# if GitHubBranch is a version number then the match must be exact to skip the download
 		if gitHubBranch[0] == 'v':
-			if gitHubVersion != packageVersion:
+			if gitHubVersionNumber != packageVersionNumber:
 				return 'download'
 			else:
 				return ''
 		# otherwise the download is skipped if the gitHubVersion is older
 		else:
-			if gitHubVersion > packageVersion:
+			if gitHubVersionNumber > packageVersionNumber:
 				return 'download'
 			else:
 				return ''
@@ -1678,6 +1678,7 @@ class DownloadGitHubPackagesClass (threading.Thread):
 				continueLoop =  self.wait (fastDelay = 10, slowDelay = 600, startTime = self.lastAutoDownloadTime,
 											statusMessage = packageName + " download begins in " )
 				if continueLoop:
+					print ("#### push Download:" + packageName)
 					ProcessAction.PushAction ( command="Download:" + packageName, source='AUTO')
 					self.lastAutoDownloadTime = time.perf_counter()
 				# start loop at beginning because wait () detected a mode change
