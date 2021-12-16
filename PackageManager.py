@@ -1499,6 +1499,8 @@ class DownloadGitHubPackagesClass (threading.Thread):
 		if len (tempPaths) > 0:
 			archivePath = tempPaths[0]
 		else:
+			self.ClearDownloadPending (packageName)
+			shutil.rmtree (tempDirectory)
 			logging.error ( "GitHubDownload: no archive path for " + packageName + " can't download")
 			return False
 
@@ -1522,6 +1524,7 @@ class DownloadGitHubPackagesClass (threading.Thread):
 		if os.path.exists (tempPackagePath):
 			shutil.rmtree (tempPackagePath, ignore_errors=True)	# like rm -rf
 		DbusIf.UNLOCK ()
+		self.ClearDownloadPending (packageName)
 		DbusIf.UpdateStatus ( message="", where=where )
 		if source == 'GUI':
 			DbusIf.UpdateGuiState ( 'ERROR' )
