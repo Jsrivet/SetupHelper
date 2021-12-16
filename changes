@@ -1,14 +1,25 @@
-add Package Manager & GUI
-add setup script return codes for above
-add optionsRequired flag file (VeCanSetup is only package that needs this now)
+v4.0~8:
+	refresh GitHub version prior to download checks
+		new upadates to GitHub could be missed
+	reduced GitHub vesion refres delay
+	touching a row in Package Version List menu
+		leads to Package Editor menu
+		and < will return to the version list
 
-add platform and version checks to CommonResources
-add install opiton to CommonResources
-better support installs without command line
-### TBD remove logging to package log files
+v4.0~5 - 7:
+	download bug fixes
+v4.0~4:
+	add Package Manager & GUI
+	add setup script return codes for above
+	add optionsRequired flag file (VeCanSetup is only package that needs this now)
 
-improve adding packages from SD/USB
+	add platform and version checks to CommonResources
+	add install opiton to CommonResources
+	better support installs without command line
+	### TBD remove logging to package log files
 
-split auto download and auto install
+	improve adding packages from SD/USB
+
+	split auto download and auto install
 
 

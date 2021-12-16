@@ -50,13 +50,19 @@ MbPage {
 	property string defaultGitHubUser: defaultGitHubUserItem.valid ? defaultGitHubUserItem.value : "??"
 	property string defaultGitHubBranch: defaultGitHubBranchItem.valid ? defaultGitHubBranchItem.value : "??"
 
-	Component.onCompleted: defaultIndex = 0
+	Component.onCompleted:
+	{
+		defaultIndex = 0
+		resetPackageIndex ()
+	}
 	onCountChanged: resetPackageIndex ()
 	onDefaultCountChanged: resetDefaultIndex ()
 	
 	function resetPackageIndex ()
 	{
-		if (packageIndex >= count)
+		if (packageIndex < 0)
+			packageIndex = 0
+		else if (packagIndex >= count)
 			packageIndex = count - 1
 	}
 	

@@ -5,7 +5,7 @@ import "utils.js" as Utils
 MbItem {
 	id: root
 
-	property int versionIndex
+	property int packageIndex
 	property string servicePrefix
 	property string settingsPrefix
 
@@ -18,6 +18,8 @@ MbItem {
     property string incompatibleReason: incompatibleItem.valid ? incompatibleItem.value : ""
     property bool compatible: incompatibleReason == ""
     property string platform: platformItem.valid ? platformItem.value : "??"
+
+	onClicked: rootWindow.pageStack.push ("/opt/victronenergy/gui/qml/PageSettingsPackageEdit.qml", {packageIndex: packageIndex})
 
 
 	function statusText ()
@@ -36,11 +38,11 @@ MbItem {
 
 	function getSettingsBind(param)
 	{
-		return Utils.path(settingsPrefix, "/", versionIndex, "/", param)
+		return Utils.path(settingsPrefix, "/", packageIndex, "/", param)
 	}
 	function getServiceBind(param)
 	{
-		return Utils.path(servicePrefix, "/Package/", versionIndex, "/", param)
+		return Utils.path(servicePrefix, "/Package/", packageIndex, "/", param)
 	}
 
 	function versionToNumber (item)

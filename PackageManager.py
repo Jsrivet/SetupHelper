@@ -242,7 +242,6 @@ sys.path.insert(1, os.path.join(os.path.dirname(__file__), 'ext', 'velib_python'
 from vedbus import VeDbusService
 from settingsdevice import SettingsDevice
 
-global GitHubVersions
 global DownloadGitHub
 global InstallPackages
 global ProcessAction
@@ -663,9 +662,6 @@ class PackageClass:
 	# list of instantiated Packages
 	PackageList = []
 
-	global GitHubVersions
-	
-
 	# search PackageList for packageName
 	# and return the package pointer if found
 	#	otherwise return None
@@ -762,7 +758,7 @@ class PackageClass:
 			self.PackageName = new
 		elif name == 'gitHubBranch' or name == 'gitHubUser':
 			if self.PackageName != None and self.PackageName != "":
-				GitHubVersions.RefreshVersion (self.PackageName )
+				DownloadGitHub.RefreshVersion (self.PackageName )
 
 	def __init__( self, section, packageName = None ):
 		# add package versions if it's a real package (not Edit)
@@ -1205,144 +1201,6 @@ class PackageClass:
 		DbusIf.UNLOCK ()
 # end Package
 
-
-#	GetGitHubVersionsClass
-#	Instances:
-#		GitHubVersions (a separate thread)
-#
-#	Methods:
-#		RefreshVersion
-#		run ( the thread )
-#		updateGitHubVersion
-#
-# retrieves GitHub versions over the network
-#	runs as a separate thread because it takes time
-#	and so we can space out network access over time
-
-class GetGitHubVersionsClass (threading.Thread):
-
-	# package needing immediate update
-	priorityPackageName = None
-
-	def __init__(self):
-		threading.Thread.__init__(self, name = "GetGitHubVersion")
-		self.threadRunning = True
-
-
-	def updateGitHubVersion (self, packageName, gitHubUser = None, gitHubBranch = None):
-		matchFound = False
-		# if user and branch aren't specified, get from package list
-		if gitHubUser == None or gitHubBranch == None:
-			DbusIf.LOCK ()
-			package = PackageClass.LocatePackage (packageName)
-			if package != None:
-				gitHubUser = package.GetGitHubUser()
-				gitHubBranch = package.GetGitHubBranch()
-			DbusIf.UNLOCK ()
-
-			# packageName no longer in list - do nothing
-			if matchFound == False:
-				return None
-
-		url = "https://raw.githubusercontent.com/" + gitHubUser + "/" + packageName + "/" + gitHubBranch + "/version"
-
-		cmdReturn = subprocess.run (["wget", "-qO", "-", url],\
-				text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-		if cmdReturn.returncode == 0:
-			gitHubVersion = cmdReturn.stdout.strip()
-		else:
-			gitHubVersion = ""
-		# locate the package with this name and update it's GitHubVersion
-		# if not in the list discard the information
-		DbusIf.LOCK ()
-		packageToUpdate = None
-		try:
-			if packageName == package.PackageName:
-				packageToUpdate = package
-		except:
-			package = PackageClass.LocatePackage (packageName)
-			if package != None:
-				packageToUpdate = package
-		if packageToUpdate != None:
-			packageToUpdate.SetGitHubVersion (gitHubVersion)
-		DbusIf.UNLOCK ()
-
-
-	#	RefreshVersion
-	#
-	# schedules the refresh of the GitHub version for a specific section
-	#	called when the gitHubBranch changes in Settings
-	#	so must return immediately
-	# the refresh is performed in the run thread
-
-	def RefreshVersion (self, packageName):
-		self.priorityPackageName = packageName
-
-	#	run() - the thread
-	#
-	# pulls the GitHub version for all packages from the internet
-	#	so this loop runs slowly and must be paced to minimize network traffic
-	#
-	# the first loop at start is a 5 seconds per package
-	# then the loop slows to 60 seconds per pacakge to save bandwidth
-	# priorityPackage is tested while waiting and updated next if defined
-	#
-	# loop extracts a packageName from the package list
-	# 	then operates on that name
-	# if the name is still in the list after fetching the GitHub version
-	#	the package list is updated
-	# if not, the version is discarded
-	#
-	# this complication is due to the need to lock the packageList
-	#	while updating it
-	#
-	# run () checks the threadRunning flag and returns if it is False,
-	#	essentially taking the thread off-line
-	#	the main method should catch the tread with join ()
-	# StopThread () is called to shut down the thread
-
-	def StopThread (self):
-		logging.info ("attempting to stop GetGitHubVersions thread")
-		self.threadRunning = False
-
-	def run (self):
-		updateRate = 5.0
-		index = 0
-		while self.threadRunning:
-			# end of package list - assume all packages have been scanned once
-			# and slow loop to one verion every 1 minute
-			DbusIf.LOCK ()
-			if index >= len (PackageClass.PackageList):
-				index = 0
-				updateRate = 60.0
-			package = PackageClass.PackageList[index]
-			name = package.PackageName
-			user = package.GetGitHubUser ()
-			branch = package.GetGitHubBranch ()
-			DbusIf.UNLOCK ()
-
-			self.updateGitHubVersion (packageName = name, gitHubUser = user,  gitHubBranch = branch)
-			index += 1
-
-			delayTime = updateRate
-			while delayTime > 0.0:
-				if self.threadRunning == False:
-					return
-				if self.priorityPackageName != None:
-					DbusIf.LOCK ()
-					package = PackageClass.LocatePackage (self.priorityPackageName)
-					if package != None:
-						user = package.GetGitHubUser ()
-						branch = package.GetGitHubBranch ()
-					DbusIf.UNLOCK ()
-					if package != None:
-						self.updateGitHubVersion (packageName = self.priorityPackageName, gitHubUser = user,  gitHubBranch = branch)
-					else:
-						logging.error ("can't fetch GitHub version - " + self.priorityPackageName + " not in list")
-					self.priorityPackageName = None
-				time.sleep (5.0)
-				delayTime -= 5.0
-			
 #	VersionToNumber
 #
 # convert a version string in the form of vX.Y~Z-large-W to an integer to make comparisions easier
@@ -1384,6 +1242,9 @@ def VersionToNumber (version):
 #	Methods:
 #		SetDownloadPending
 #		ClearDownloadPending
+#		updateGitHubVersion
+#		updatePriorityGitHubVersion
+#		RefreshVersion
 #		GitHubDownload
 #		downloadNeeded
 #		wait
@@ -1405,6 +1266,9 @@ class DownloadGitHubPackagesClass (threading.Thread):
 		self.lastMode = 0
 		self.lastAutoDownloadTime = 0.0
 		self.threadRunning = True
+		# package needing immediate update
+		self.priorityPackageName = None
+		self.firstPass = False
 
 	# the ...Pending flag prevents duplicate actions from piling up
 	# automatic downloads are not queued if there is one pending
@@ -1428,6 +1292,73 @@ class DownloadGitHubPackagesClass (threading.Thread):
 		package = PackageClass.LocatePackage (packageName)
 		if package != None:
 			package.downloadPending = False
+
+	# fetches the GitHub version from the internet and stores it in the package
+	#
+	# this is called from the background thread run () below
+	#	prior to checking to see if an automatic download is necessary
+	#
+	# if the wget fails, the GitHub version is set to ""
+	# this will happen if the name, user or branch are not correct or if
+	# there is no internet connection
+	#
+	# the package GitHub version is upated
+	# but the version is also returned to the caller
+	# TODO: check timeout
+
+	def updateGitHubVersion (self, packageName, gitHubUser, gitHubBranch):
+
+		url = "https://raw.githubusercontent.com/" + gitHubUser + "/" + packageName + "/" + gitHubBranch + "/version"
+
+		cmdReturn = subprocess.run (["wget", "-qO", "-", url],\
+				text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+		if cmdReturn.returncode == 0:
+			gitHubVersion = cmdReturn.stdout.strip()
+		else:
+			gitHubVersion = ""
+		# locate the package with this name and update it's GitHubVersion
+		# if not in the list discard the information
+		DbusIf.LOCK ()
+		package = PackageClass.LocatePackage (packageName)
+		if package != None:
+			package.SetGitHubVersion (gitHubVersion)
+		DbusIf.UNLOCK ()
+		return gitHubVersion
+
+
+	# handles priority GitHub version updates
+	#	needed to show the version ASAP after
+	#	gitHubUser or gitHubBranch change
+	#
+	# it is called from the wait loop below as run ()
+	#	waits to perform the next task
+
+	def updatePriorityGitHubVersion (self):
+		if self.priorityPackageName != None:
+			DbusIf.LOCK ()
+			package = PackageClass.LocatePackage (self.priorityPackageName)
+			if package != None:
+				user = package.GetGitHubUser ()
+				branch = package.GetGitHubBranch ()
+			DbusIf.UNLOCK ()
+			if package != None:
+				self.updateGitHubVersion (self.priorityPackageName, user, branch)
+				time.sleep (1.0)
+			else:
+				logging.error ("can't fetch GitHub version - " + self.priorityPackageName + " not in list")
+			self.priorityPackageName = None
+
+
+	#	RefreshVersion
+	#
+	# schedules the refresh of the GitHub version for a specific section
+	#	called when the gitHubBranch changes in Settings
+	#	so must return immediately
+	# the refresh is performed in wait ()
+
+	def RefreshVersion (self, packageName):
+		self.priorityPackageName = packageName
+		
 
 	# this method downloads a package from GitHub
 	# it is called from the queue command processor ProcessAction.run()
@@ -1533,40 +1464,37 @@ class DownloadGitHubPackagesClass (threading.Thread):
 	# end GitHubDownload
 
 	# compares versions to determine if a download is needed
-	#	returns:
-	#		'skipped' if versions were not available and couldn't be checked
-	#		'download' if a download is needed
-	#		'' if download is NOT needed
+	# returns: True if a download is needed, False otherwise
 	
-	def downloadNeeded (self, package):
-		gitHubVersion = package.GetGitHubVersion ()
-		packageVersion = package.GetPackageVersion ()
-		gitHubBranch = package.GetGitHubBranch ()
+	def downloadNeeded (self, packageVersion, gitHubVersion, gitHubBranch):
 		# no gitHubVersion - skip further checks
-		if gitHubVersion == '' or packageVersion == '':
-			return 'skipped'
+		if gitHubVersion == '':
+			return False
 
 		packageVersionNumber = VersionToNumber( packageVersion )
 		gitHubVersionNumber = VersionToNumber( gitHubVersion )
-		# if GitHubBranch is a version number then the match must be exact to skip the download
+		# if GitHubBranch is a version number, a download is needed if the versions differ
 		if gitHubBranch[0] == 'v':
 			if gitHubVersionNumber != packageVersionNumber:
-				return 'download'
+				return True
 			else:
-				return ''
-		# otherwise the download is skipped if the gitHubVersion is older
+				return False
+		# otherwise the download is needed if the gitHubVersion is newer
 		else:
 			if gitHubVersionNumber > packageVersionNumber:
-				return 'download'
+				return True
 			else:
-				return ''
+				return False
+
 
 	# downloads and version checks are spaced out to minimize network traffic
-	#	the wait time depends on the download mode:
-	#		fast or one pass delays 10 seconds
-	#		slow (normal) delays 10 minutes
-	#	the time is broken into 5 second intervals so we can check for mode changes
-	#		and update download status on the GUI
+	#	the wait slow and fast wait times are passed from the caller
+	#		and the slow/fast decision is made here based on the auto download mode
+	#	the time is broken into 5 second intervals so we can:
+	#		check for mode changes
+	#		update download status on the GUI
+	#		handle priority GitHub version updates
+	#			(triggered when the GitHub user/branch changes)
 	#
 	#	if the download mode changes while we are waiting, we want to restart the scan
 	#
@@ -1576,26 +1504,34 @@ class DownloadGitHubPackagesClass (threading.Thread):
 	#	this routine returns True if the process should continue
 	#		or False if we want to reset the loop to the first package
 
-	def wait (self, fastDelay = 5, slowDelay = 30, startTime = None, statusMessage = ""):
+	def wait (self, fastDelay = 5, slowDelay = 30, startTime = None, statusMessage = None):
 		# sleep until it's time to download
 		# break into 5 second delays so we can check for mode changes
 		# and update status
 		if startTime == None:
 			startTime = time.perf_counter()
+
 		while True:
+			self.updatePriorityGitHubVersion ()
+
 			currentMode = DbusIf.GetAutoDownload ()
-			# auto-downloads disabled or speeding up loop - start scan with first package
-			if currentMode == AUTO_DOWNLOADS_OFF \
-						or (currentMode >= FAST_DOWNLOAD and self.lastMode == NORMAL_DOWNLOAD):
+			lastMode = self.lastMode
+			self.lastMode = currentMode
+			# speeding up loop - start scan with first package
+			if (currentMode != NORMAL_DOWNLOAD and lastMode == NORMAL_DOWNLOAD):
 				return False	# return with no delay
 
-			# set delay: single pass or fast check
-			# does NOT affect delay if no download
-			if currentMode == FAST_DOWNLOAD or currentMode == ONE_DOWNLOAD:
-				delayTime = fastDelay
-			# slow check
-			else:
+			# if auto download is off, use firstPass to set the delay
+			if currentMode == AUTO_DOWNLOADS_OFF:
+				if self.firstPass:
+					delayTime = fastDelay
+				else:
+					delayTime = slowDelay
+			# otherwise, set delay based on mode
+			elif currentMode == NORMAL_DOWNLOAD:
 				delayTime = slowDelay
+			else:
+				delayTime = fastDelay
 			timeToGo = delayTime + startTime - time.perf_counter()
 			
 			# normal exit here - wait for download expired, time to do it
@@ -1606,10 +1542,11 @@ class DownloadGitHubPackagesClass (threading.Thread):
 			if self.threadRunning == False:
 				return False	# return with no delay
 		
-			if timeToGo > 90:
-				DbusIf.UpdateStatus ( message=statusMessage + "%0.1f minutes" % ( timeToGo / 60 ), where='Download' )
-			elif  timeToGo > 1.0:
-				DbusIf.UpdateStatus ( message=statusMessage + "%0.0f seconds" % ( timeToGo ), where='Download' )
+			if statusMessage != None:
+				if timeToGo > 90:
+					DbusIf.UpdateStatus ( message=statusMessage + "%0.1f minutes" % ( timeToGo / 60 ), where='Download' )
+				elif  timeToGo > 1.0:
+					DbusIf.UpdateStatus ( message=statusMessage + "%0.0f seconds" % ( timeToGo ), where='Download' )
 
 		return True
 
@@ -1626,6 +1563,12 @@ class DownloadGitHubPackagesClass (threading.Thread):
 	# the actual download occurs from the InstallPackagessThread
 	# which pulls actions from a queue
 	#
+	# this method is also responsible for refreshing the GitHub version
+	#	since up to date version information is needed to decide if a download is needed
+	#
+	# the loop is paced by the wait () method which monitors threadRunning
+	#	every 5 seconds
+	#
 	# run () checks the threadRunning flag and returns if it is False,
 	#	essentially taking the thread off-line
 	#	the main method should catch the tread with join ()
@@ -1635,49 +1578,65 @@ class DownloadGitHubPackagesClass (threading.Thread):
 		logging.info ("attempting to stop DownloadGitHub thread")
 		self.threadRunning = False
 
-	def run (self):
-		# give time for first GitHub version to be retrieved
-		time.sleep (6.0)
 
-		global GitHubVersions
+	def run (self):
 		self.lastMode = AUTO_DOWNLOADS_OFF
 		currentMode = AUTO_DOWNLOADS_OFF
 		continueLoop = True
+		self.firstPass = True
 		i = 0
 		while self.threadRunning:	# loop forever
-			self.lastMode = currentMode
-			currentMode = DbusIf.GetAutoDownload ()				
-			if currentMode == AUTO_DOWNLOADS_OFF:
-				# idle message
-				DbusIf.UpdateStatus ( message="", where='Download' )
-				time.sleep (5.0)
-				if self.threadRunning == False:
-					return
-				continue
 
+			# gather package parameters while locked, then use them later after unlock
 			DbusIf.LOCK ()
 			packageLength = len (PackageClass.PackageList)
 
-			# loop continues until a download is needed or the end of the list is reached
-			# after processing a download, returns here to check the next package
-			#
 			if i >= packageLength:
 				i = 0
 			package = PackageClass.PackageList[i]
-			packageName = package.PackageName
-			DbusIf.UpdateStatus (message="Checking " + packageName, where='Download')
 
-			# update for next pass - DO NOT use i inside the loop after this
-			i += 1
-			# don't create another download action if one is already pending
-			if package.DownloadPending:
-				downloadNeeded = ''
-			else:
-				downloadNeeded = self.downloadNeeded (package)
+			# get info from package while locked but use it after unlock
+			# it's done this way so we can refresh the GitHub version prior to version comparisons
+			#	and can't do the internet check with the package locked
+			packageName = package.PackageName
+			downloadPending = package.DownloadPending
+			gitHubUser = package.GetGitHubUser ()
+			gitHubBranch = package.GetGitHubBranch ()
+			packageVersion = package.GetPackageVersion ()
+
 			DbusIf.UNLOCK ()
 
-			if downloadNeeded == 'download':
-				package.DownloadPending = True
+			# refresh GitHub version
+			gitHubVersion = self.updateGitHubVersion (packageName, gitHubUser, gitHubBranch)
+
+			currentMode = DbusIf.GetAutoDownload ()				
+			if currentMode == AUTO_DOWNLOADS_OFF:
+				# idle message
+				status = ""
+				downloadNeeded = False
+			else:
+				if downloadPending:
+					downloadNeeded = False
+				elif gitHubVersion == "":
+					downloadNeeded = False
+				else:
+					downloadNeeded = self.downloadNeeded (packageVersion, gitHubVersion, gitHubBranch)
+				status = "checking " + packageName
+			DbusIf.UpdateStatus (message=status, where='Download')
+
+			# reacquire package so we can set the download pending flag
+			# if package is no longer in the list, discard the download request
+			if downloadNeeded:
+				DbusIf.LOCK ()
+				# package has changed, locate it
+				if package.PackageName != packageName:
+					package = PackageClass.LocatePackage (packageName)
+				if package != None:
+					package.DownloadPending = True
+				else:
+					downloadNeeded = False
+				DbusIf.UNLOCK ()
+			if downloadNeeded:
 				continueLoop =  self.wait (fastDelay = 10, slowDelay = 600, startTime = self.lastAutoDownloadTime,
 											statusMessage = packageName + " download begins in " )
 				if continueLoop:
@@ -1686,23 +1645,27 @@ class DownloadGitHubPackagesClass (threading.Thread):
 				# start loop at beginning because wait () detected a mode change
 				else:
 					i = 0
+					self.firstPass = True
 			# no download needed - pause then move on to next package
 			else:
 				if self.threadRunning == False:
 					return
-				if downloadNeeded == 'skipped':
-					message = packageName + " skipped, next in "
+				# don't update status message if auto downloads are off
+				# we must get here with downloads off so we can refresh GitHub version (in wait () )
+				if currentMode == AUTO_DOWNLOADS_OFF:
+					message = None
 				else:
 					message = packageName + " checked, next in "
-				continueLoop = self.wait (fastDelay = 5, slowDelay = 180, statusMessage = message)
+				continueLoop = self.wait (fastDelay = 5, slowDelay = 60, statusMessage = message)
 				# start loop at beginning because wait () detected a mode change
 				if continueLoop == False:
 					i = 0
-			
+					self.firstPass = True
+
+			i += 1
 			# end of the package list - need to start with first package in same mode
-			# note the reset of i = 0 indicates the loop was restarted in the middle
-			# so do not change modes
 			if i >= len( PackageClass.PackageList ):
+				self.firstPass = False
 				# change fast loop to slow
 				currentMode = DbusIf.GetAutoDownload ()
 				if currentMode == FAST_DOWNLOAD:
@@ -1806,7 +1769,7 @@ class InstallPackagesClass (threading.Thread):
 			callBack = None
 
 		if os.path.isfile(setupFile) == False:
-			DbusIf.UpdateStatus ( message=packageName + "setup file doesn't exist",
+			DbusIf.UpdateStatus ( message=packageName + " setup file doesn't exist",
 											where=sendStatusTo, logLevel=WARNING )
 			if source == 'GUI':
 				DbusIf.UpdateGuiState ( 'ERROR' )
@@ -2239,10 +2202,6 @@ def main():
 		PackageClass.AddDefaultPackages ()
 		PackageClass.AddStoredPackages ()
 
-		global GitHubVersions
-		GitHubVersions = GetGitHubVersionsClass()
-		GitHubVersions.start()
-		
 		global DownloadGitHub
 		DownloadGitHub = DownloadGitHubPackagesClass ()
 		DownloadGitHub.start()
@@ -2269,13 +2228,11 @@ def main():
 
 	# stop threads, remove service from dbus
 	logging.warning ("stopping threads")
-	GitHubVersions.StopThread ()
 	DownloadGitHub.StopThread ()
 	InstallPackages.StopThread ()
 	ProcessAction.StopThread ()
 	DbusIf.RemoveDbusService ()
 	try:
-		GitHubVersions.join (timeout=10.0)
 		DownloadGitHub.join (timeout=30.0)
 		InstallPackages.join (timeout=10.0)
 		ProcessAction.join (timeout=10.0)

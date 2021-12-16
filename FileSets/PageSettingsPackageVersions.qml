@@ -20,7 +20,7 @@ MbPage {
         {
             servicePrefix: root.servicePrefix
             settingsPrefix: root.settingsPrefix
-            versionIndex: index
+            packageIndex: index
         }
     }
 }
