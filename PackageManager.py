@@ -1583,7 +1583,7 @@ class DownloadGitHubPackagesClass (threading.Thread):
 			currentMode = DbusIf.GetAutoDownload ()
 			# auto-downloads disabled or speeding up loop - start scan with first package
 			if currentMode == AUTO_DOWNLOADS_OFF \
-						or (currentMode >= FAST_DOWNLOAD and self.lastMode <= NORMAL_DOWNLOAD):
+						or (currentMode >= FAST_DOWNLOAD and self.lastMode == NORMAL_DOWNLOAD):
 				return False	# return with no delay
 
 			# set delay: single pass or fast check
@@ -1678,7 +1678,6 @@ class DownloadGitHubPackagesClass (threading.Thread):
 				continueLoop =  self.wait (fastDelay = 10, slowDelay = 600, startTime = self.lastAutoDownloadTime,
 											statusMessage = packageName + " download begins in " )
 				if continueLoop:
-					print ("#### push Download:" + packageName)
 					ProcessAction.PushAction ( command="Download:" + packageName, source='AUTO')
 					self.lastAutoDownloadTime = time.perf_counter()
 				# start loop at beginning because wait () detected a mode change
