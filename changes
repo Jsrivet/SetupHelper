@@ -1,3 +1,8 @@
+v4.0~9:
+	fixed bug with firstCompatibleVersion
+	added try: / except: around all subprocess.run calls
+		so if the call fails, the program continues to run
+
 v4.0~8:
 	refresh GitHub version prior to download checks
 		new upadates to GitHub could be missed

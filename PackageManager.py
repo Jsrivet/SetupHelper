@@ -1310,8 +1310,12 @@ class DownloadGitHubPackagesClass (threading.Thread):
 
 		url = "https://raw.githubusercontent.com/" + gitHubUser + "/" + packageName + "/" + gitHubBranch + "/version"
 
-		cmdReturn = subprocess.run (["wget", "-qO", "-", url],\
-				text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+		try:
+			cmdReturn = subprocess.run (["wget", "-qO", "-", url],\
+					text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+		except:
+			logging.warning ("wget for version failed " + packageName)
+			logging.warning (cmdReturn.stderr)
 		if cmdReturn.returncode == 0:
 			gitHubVersion = cmdReturn.stdout.strip()
 		else:
@@ -1398,28 +1402,34 @@ class DownloadGitHubPackagesClass (threading.Thread):
 		# download archive
 		if os.path.exists (tempArchiveFile):
 			os.remove ( tempArchiveFile )
-		cmdReturn = subprocess.run ( ['wget', '-qO', tempArchiveFile, url ],\
-						text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+		try:
+			cmdReturn = subprocess.run ( ['wget', '-qO', tempArchiveFile, url ],\
+							text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+		except:
+			logging.warning ("wget for archive failed " + packageName)
+			logging.warning (cmdReturn.stderr)
+			
 		if cmdReturn.returncode != 0:
 			DbusIf.UpdateStatus ( message="can't access" + packageName + ' ' + gitHubUser + ' ' + gitHubBranch + " on GitHub",
 										where=where, logLevel=WARNING )
 			if source == 'GUI':
 				DbusIf.UpdateGuiState ( 'ERROR' )
 			self.ClearDownloadPending (packageName)
-			# log stderr also
-			logging.warning (cmdReturn.stderr)
 			shutil.rmtree (tempDirectory)
 			return False
-		cmdReturn = subprocess.run ( ['tar', '-xzf', tempArchiveFile, '-C', tempDirectory ],
+		try:
+			cmdReturn = subprocess.run ( ['tar', '-xzf', tempArchiveFile, '-C', tempDirectory ],
 										text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+		except:
+			logging.warning ("tar unpack from GitHub failed " + packageName)
+			logging.warning (cmdReturn.stderr)
+
 		if cmdReturn.returncode != 0:
 			DbusIf.UpdateStatus ( message="can't unpack " + packageName + ' ' + gitHubUser + ' ' + gitHubBranch,
 										where=where, logLevel=WARNING )
 			if source == 'GUI':
 				DbusIf.UpdateGuiState ( 'ERROR' )
 			self.ClearDownloadPending (packageName)
-			# log stderr also
-			logging.warning (cmdReturn.stderr)
 			shutil.rmtree (tempDirectory)
 			return False
 
@@ -1778,8 +1788,12 @@ class InstallPackagesClass (threading.Thread):
 			DbusIf.UNLOCK ()
 			return
 		DbusIf.UpdateStatus ( message=direction + "ing " + packageName, where=sendStatusTo )
-		cmdReturn = subprocess.run ( [ setupFile, direction, 'deferReboot' ], timeout=120,
-				text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE )
+		try:
+			cmdReturn = subprocess.run ( [ setupFile, direction, 'deferReboot' ], timeout=120,
+					text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE )
+		except:
+			logging.warning ("setup file failed " + packageName)
+			logging.warning (cmdReturn.stderr)
 		DbusIf.LOCK ()
 		self.clearInstallPending (packageName)
 		package = PackageClass.LocatePackage (packageName)
@@ -1945,8 +1959,12 @@ class MediaScanClass (threading.Thread):
 		os.mkdir (tempDirectory)
 
 		# unpack the archive - result is placed in tempDirectory
-		cmdReturn = subprocess.run ( ['tar', '-xzf', path, '-C', tempDirectory ],
+		try:
+			cmdReturn = subprocess.run ( ['tar', '-xzf', path, '-C', tempDirectory ],
 										text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+		except:
+			logging.warning ("tar unpack from SD/USB failed " + packageName)
+			logging.warning (cmdReturn.stderr)
 		if cmdReturn.returncode != 0:
 			logging.warning ( "can't unpack " + packageName + " from SD/USB media" )
 			shutil.rmtree (tempDirectory)
@@ -2244,16 +2262,20 @@ def main():
 	if SystemReboot:
 		logging.critical ("REBOOTING: to complete package installation")
 
-		subprocess.run ( [ 'shutdown', '-r', 'now', 'rebooting to complete package installation' ] )
-		# TODO: for debug    subprocess.run ( [ 'shutdown', '-k', 'now', 'simulated reboot - system staying up' ] )
+		try:
+			subprocess.run ( [ 'shutdown', '-r', 'now', 'rebooting to complete package installation' ] )
+			# for debug:    subprocess.run ( [ 'shutdown', '-k', 'now', 'simulated reboot - system staying up' ] )
+		except:
+			logging.warning ("shutdown failed")
+			logging.warning (cmdReturn.stderr)
 
 		# insure the package manager service doesn't restart when we exit
 		#	it will start up again after the reboot
-		subprocess.run ( [ 'svc', '-o', '/service/PackageManager' ], text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-		if cmdReturn.returncode != 0:
-			logging.warning ("svc to once failed")
+		try:
+			subprocess.run ( [ 'svc', '-o', '/service/PackageManager' ], text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+		except:
+			logging.warning ("svc to shutdown PackageManager failed")
 			logging.warning (cmdReturn.stderr)
-
 
 	logging.critical (">>>> PackageMonitor exiting")
 

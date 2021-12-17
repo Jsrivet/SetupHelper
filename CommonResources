@@ -674,7 +674,7 @@ fi
 # check to see if package is compatible with this Venus version
 versionNotCompatible=false
 if [ -f "$scriptDir/firstCompatibleVersion" ]; then
-	firstCompatibleVersion = $(cat "$scriptDir/firstCompatibleVersion")
+	firstCompatibleVersion=$(cat "$scriptDir/firstCompatibleVersion")
 # no first compatible version specified - use the default
 else
 	firstCompatibleVersion='v2.40'
