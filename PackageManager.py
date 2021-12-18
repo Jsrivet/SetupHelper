@@ -592,7 +592,7 @@ class DbusIfClass:
 		try:
 			listFile = open ("/data/SetupHelper/defaultPackageList", 'r')
 		except:
-			logging.warning ("no defaultPackageList " + listFileName)
+			logging.error ("no defaultPackageList " + listFileName)
 		else:
 			for line in listFile:
 				parts = line.split ()
@@ -616,7 +616,7 @@ class DbusIfClass:
 	#  deletes the dbus service
 
 	def RemoveDbusService (self):
-		logging.info ("shutting down com.victronenergy.packageMonitor dbus service")
+		logging.warning ("shutting down com.victronenergy.packageMonitor dbus service")
 		self.DbusService.__del__()
 	
 # end DbusIf
@@ -1002,7 +1002,7 @@ class PackageClass:
 
 		# new packageName is unique, OK to add it
 		if package == None:
-			DbusIf.UpdateStatus ( message="Adding package " + packageName, where='Editor', logLevel=INFO )
+			DbusIf.UpdateStatus ( message="Adding package " + packageName, where='Editor', logLevel=WARNING )
 
 			section = len(cls.PackageList)
 			cls.PackageList.append( PackageClass ( section, packageName = packageName ) )
@@ -1018,10 +1018,10 @@ class PackageClass:
 				os.remove (path)
 		else:
 			if source == 'GUI':
-				DbusIf.UpdateStatus ( message=packageName + " already exists - choose another name", where=reportStatusTo, logLevel=INFO )
+				DbusIf.UpdateStatus ( message=packageName + " already exists - choose another name", where=reportStatusTo, logLevel=WARNING )
 				DbusIf.UpdateGuiState ( 'ERROR' )
 			else:
-				DbusIf.UpdateStatus ( message=packageName + " already exists", where=reportStatusTo, logLevel=INFO )
+				DbusIf.UpdateStatus ( message=packageName + " already exists", where=reportStatusTo, logLevel=WARNING )
 		
 		DbusIf.UNLOCK ()
 	# end AddPackage
@@ -1044,10 +1044,9 @@ class PackageClass:
 	@classmethod
 	def RemovePackage (cls, packageName ):
 		if packageName == "SetupHelper":
-			DbusIf.UpdateStatus ( message="can't remove SetupHelper" + packageName, where='Editor', logLevel=INFO )
-			return
-
-		DbusIf.UpdateStatus ( message="removing " + packageName, where='Editor', logLevel=INFO )
+			DbusIf.UpdateStatus ( message="REMOVING SetupHelper" + packageName, where='Editor', logLevel=CRITICAL )
+		else:
+			DbusIf.UpdateStatus ( message="removing " + packageName, where='Editor', logLevel=WARNING )
 		DbusIf.LOCK ()
 		packages = PackageClass.PackageList
 
@@ -1235,6 +1234,49 @@ def VersionToNumber (version):
 	return versionNumber
 
 
+# attempt to locate a package directory
+#
+# all directories at the current level are checked
+#	to see if they contain a file named 'version'
+#	indicating a package directory has been found
+#
+#	further, the version file must begin with 'v'
+#
+# if so, that path is returned
+#
+# if a directory NOT containing 'version' is found
+#	this method is called again to look inside that directory
+#
+# if nothing is found, the method returns None
+#
+# all recursive calls will return with the located package or None
+#	so the original caller will have the path to the package or None
+
+def LocatePackagePath (origPath):
+	paths = os.listdir (origPath)
+	for path in paths:
+		newPath = origPath +'/' + path
+		if os.path.isdir(newPath):
+			# found version file, make sure it is "valid"
+			versionFile = newPath + "/version"
+			if os.path.isfile( versionFile ):
+				fd = open ( versionFile, 'r' )
+				version = fd.readline().strip()
+				fd.close()
+				if version[0] == 'v':
+					return newPath
+				else:
+					logging.error ("version file not a valid version " + versionFile + " = " + version )
+			else:
+				packageDir = locatePackagePath (newPath)
+				# found a package directory
+				if packageDir != None:
+					return packageDir
+				# nothing found - continue looking in this directory
+				else:
+					continue
+	return None
+
 #	DownloadGitHubPackagesClass
 #	Instances:
 #		DownloadGitHub (a separate thread)
@@ -1362,7 +1404,7 @@ class DownloadGitHubPackagesClass (threading.Thread):
 
 	def RefreshVersion (self, packageName):
 		self.priorityPackageName = packageName
-		
+
 
 	# this method downloads a package from GitHub
 	# it is called from the queue command processor ProcessAction.run()
@@ -1393,7 +1435,7 @@ class DownloadGitHubPackagesClass (threading.Thread):
 		gitHubBranch = package.GetGitHubBranch ()
 		DbusIf.UNLOCK ()
 
-		DbusIf.UpdateStatus ( message="downloading " + packageName, where=where, logLevel=INFO )
+		DbusIf.UpdateStatus ( message="downloading " + packageName, where=where, logLevel=WARNING )
 		self.SetDownloadPending (packageName)
 
 		url = "https://github.com/" + gitHubUser + "/" + packageName  + "/archive/" + gitHubBranch  + ".tar.gz"
@@ -1421,54 +1463,44 @@ class DownloadGitHubPackagesClass (threading.Thread):
 			cmdReturn = subprocess.run ( ['tar', '-xzf', tempArchiveFile, '-C', tempDirectory ],
 										text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 		except:
-			logging.warning ("tar unpack from GitHub failed " + packageName)
-			logging.warning (cmdReturn.stderr)
+			logging.error ("tar unpack from GitHub failed " + packageName)
+			logging.error (cmdReturn.stderr)
 
 		if cmdReturn.returncode != 0:
 			DbusIf.UpdateStatus ( message="can't unpack " + packageName + ' ' + gitHubUser + ' ' + gitHubBranch,
-										where=where, logLevel=WARNING )
-			if source == 'GUI':
-				DbusIf.UpdateGuiState ( 'ERROR' )
-			self.ClearDownloadPending (packageName)
-			shutil.rmtree (tempDirectory)
-			return False
-
-		# unpacked archive path is anything beginning with the packageName
-		# should only be one item in the list, discard any others
-		searchPath = tempDirectory + '/' + packageName + '*'
-		tempPaths = glob.glob (searchPath)
-		if len (tempPaths) > 0:
-			archivePath = tempPaths[0]
-		else:
-			self.ClearDownloadPending (packageName)
-			shutil.rmtree (tempDirectory)
-			logging.error ( "GitHubDownload: no archive path for " + packageName + " can't download")
-			return False
-
-		if os.path.isdir(archivePath) == False:
-		
-			DbusIf.UpdateStatus ( message="archive path for " + packageName + " not valid - can't use it",
 										where=where, logLevel=ERROR )
 			if source == 'GUI':
 				DbusIf.UpdateGuiState ( 'ERROR' )
 			self.ClearDownloadPending (packageName)
 			shutil.rmtree (tempDirectory)
 			return False
+
+		# attempt to locate a directory that contains a version file
+		# the first directory in the tree starting with tempDicrectory
+		# is returnd
+		unpackedPath = LocatePackagePath (tempDirectory)
+		if unpackedPath == None:
+			self.ClearDownloadPending (packageName)
+			shutil.rmtree (tempDirectory)
+			logging.error ( "GitHubDownload: no archive path for " + packageName)
+			return False
+
 		# move unpacked archive to package location
 		# LOCK this critical section of code to prevent others
 		#	from accessing the directory while it's being updated
+		packagePath = "/data/" + packageName
 		tempPackagePath = packagePath + "-temp"
 		DbusIf.LOCK ()
 		if os.path.exists (packagePath):
 			os.rename (packagePath, tempPackagePath)
-		shutil.move (archivePath, packagePath)
+		shutil.move (unpackedPath, packagePath)
 		if os.path.exists (tempPackagePath):
 			shutil.rmtree (tempPackagePath, ignore_errors=True)	# like rm -rf
 		DbusIf.UNLOCK ()
 		self.ClearDownloadPending (packageName)
 		DbusIf.UpdateStatus ( message="", where=where )
 		if source == 'GUI':
-			DbusIf.UpdateGuiState ( 'ERROR' )
+			DbusIf.UpdateGuiState ( '' )
 		shutil.rmtree (tempDirectory)
 		return True
 	# end GitHubDownload
@@ -1780,7 +1812,7 @@ class InstallPackagesClass (threading.Thread):
 
 		if os.path.isfile(setupFile) == False:
 			DbusIf.UpdateStatus ( message=packageName + " setup file doesn't exist",
-											where=sendStatusTo, logLevel=WARNING )
+											where=sendStatusTo, logLevel=ERROR )
 			if source == 'GUI':
 				DbusIf.UpdateGuiState ( 'ERROR' )
 			DbusIf.LOCK ()
@@ -1792,8 +1824,8 @@ class InstallPackagesClass (threading.Thread):
 			cmdReturn = subprocess.run ( [ setupFile, direction, 'deferReboot' ], timeout=120,
 					text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE )
 		except:
-			logging.warning ("setup file failed " + packageName)
-			logging.warning (cmdReturn.stderr)
+			logging.error ("setup file failed " + packageName)
+			logging.error (cmdReturn.stderr)
 		DbusIf.LOCK ()
 		self.clearInstallPending (packageName)
 		package = PackageClass.LocatePackage (packageName)
@@ -1808,7 +1840,7 @@ class InstallPackagesClass (threading.Thread):
 			package.SetRebootNeeded (True)
 
 			DbusIf.UpdateStatus ( message=packageName + " " + direction + " requires REBOOT",
-											where=sendStatusTo, logLevel=INFO )
+											where=sendStatusTo, logLevel=WARNING )
 			if source == 'GUI':
 				DbusIf.UpdateGuiState ( 'RebootNeeded' )
 			# auto install triggers a reboot by setting the global flag - reboot handled in main_loop
@@ -1842,13 +1874,13 @@ class InstallPackagesClass (threading.Thread):
 				DbusIf.UpdateGuiState ( 'ERROR' )
 		elif cmdReturn.returncode == EXIT_FILE_SET_ERROR:
 			DbusIf.UpdateStatus ( message=packageName + " file set error incomplete",
-											where=sendStatusTo, logLevel=WARNING )
+											where=sendStatusTo, logLevel=ERROR )
 			if source == 'GUI':
 				DbusIf.UpdateGuiState ( 'ERROR' )
 		# unknown error
 		elif cmdReturn.returncode != 0:
 			DbusIf.UpdateStatus ( message=packageName + " " + direction + " unknown error " + str (cmdReturn.returncode),
-											where=sendStatusTo, logLevel=WARNING )
+											where=sendStatusTo, logLevel=ERROR )
 			if source == 'GUI':
 				DbusIf.UpdateGuiState ( 'ERROR' )
 		DbusIf.UNLOCK ()
@@ -1963,29 +1995,17 @@ class MediaScanClass (threading.Thread):
 			cmdReturn = subprocess.run ( ['tar', '-xzf', path, '-C', tempDirectory ],
 										text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 		except:
-			logging.warning ("tar unpack from SD/USB failed " + packageName)
-			logging.warning (cmdReturn.stderr)
+			logging.error ("tar unpack from SD/USB failed " + packageName)
+			logging.error (cmdReturn.stderr)
 		if cmdReturn.returncode != 0:
-			logging.warning ( "can't unpack " + packageName + " from SD/USB media" )
+			logging.error ( "can't unpack " + packageName + " from SD/USB media" )
 			shutil.rmtree (tempDirectory)
 			return False
 
-		unpackedPath = glob.glob (tempDirectory + '/' + packageName + "*" )[0]
-		if os.path.isdir(unpackedPath) == False:
-			logging.warning (packageName + " archive not a directory - rejected" )
-			shutil.rmtree (tempDirectory)
-			return False
-
-		#check for version file
-		versionFile = unpackedPath + "/version"
-		if not os.path.isfile (versionFile):
-			logging.warning (packageName + " version file does not exist - archive rejected" )
-			shutil.rmtree (tempDirectory)
-			return False
-		fd = open (versionFile, 'r')
-		version = fd.readline().strip()
-		if version[0] != 'v':
-			logging.warning (packageName + "invalid version" + version + " - archive rejected")
+		# attempt to locate a package directory in the tree below tempDirectory
+		unpackedPath = LocatePackagePath (tempDirectory)
+		if unpackedPath == None:
+			logging.warning (packageName + " archive doesn't contain a package directory - rejected" )
 			shutil.rmtree (tempDirectory)
 			return False
 
@@ -1995,7 +2015,7 @@ class MediaScanClass (threading.Thread):
 		# move unpacked archive to package location
 		# LOCK this critical section of code to prevent others
 		#	from accessing the directory while it's being updated
-		DbusIf.UpdateStatus ( message="transfering " + packageName + " from SD/USB", where='Media', logLevel=INFO )
+		DbusIf.UpdateStatus ( message="transfering " + packageName + " from SD/USB", where='Media', logLevel=WARNING )
 		packagePath = "/data/" + packageName
 		tempPackagePath = packagePath + "-temp"
 		DbusIf.LOCK () 
@@ -2165,7 +2185,7 @@ def main():
 	# set logging level to include info level entries
 	logging.basicConfig( format='%(levelname)s:%(message)s', level=logging.WARNING ) # TODO: change to INFO, etc for debug
 
-	logging.warning (">>>> Package Monitor starting")
+	logging.warning (">>>> PackageMonitor starting")
 
 	from dbus.mainloop.glib import DBusGMainLoop
 
@@ -2260,22 +2280,22 @@ def main():
 
 	# check for reboot
 	if SystemReboot:
-		logging.critical ("REBOOTING: to complete package installation")
+		logging.warning ("REBOOTING: to complete package installation")
 
 		try:
 			subprocess.run ( [ 'shutdown', '-r', 'now', 'rebooting to complete package installation' ] )
 			# for debug:    subprocess.run ( [ 'shutdown', '-k', 'now', 'simulated reboot - system staying up' ] )
 		except:
-			logging.warning ("shutdown failed")
-			logging.warning (cmdReturn.stderr)
+			logging.critical ("shutdown failed")
+			logging.critical (cmdReturn.stderr)
 
 		# insure the package manager service doesn't restart when we exit
 		#	it will start up again after the reboot
 		try:
 			subprocess.run ( [ 'svc', '-o', '/service/PackageManager' ], text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 		except:
-			logging.warning ("svc to shutdown PackageManager failed")
-			logging.warning (cmdReturn.stderr)
+			logging.critical ("svc to shutdown PackageManager failed")
+			logging.critical (cmdReturn.stderr)
 
 	logging.critical (">>>> PackageMonitor exiting")
 

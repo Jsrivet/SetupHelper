@@ -1,3 +1,12 @@
+v4.0~10:
+	GitHub downloads and SD/USB transfers now scan the entire directory tree
+		searching for a package directory. This was done because of the 123 smartBMS
+		archive directory structure but there are other issues preventing integration
+		with PackageManger.
+	Fixed bug that showed a blank status line with the OK button after a download
+		Rhe OK button no longer appears and Package Editor menu returns
+		to the "navigation" mode
+
 v4.0~9:
 	fixed bug with firstCompatibleVersion
 	added try: / except: around all subprocess.run calls

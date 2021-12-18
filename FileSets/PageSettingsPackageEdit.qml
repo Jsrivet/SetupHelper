@@ -68,7 +68,9 @@ MbPage {
 	
 	function resetDefaultIndex ()
 	{
-		if (defaultIndex >= defaultCount)
+		if (defaultIndex < 0)
+			defaultIndex = 0
+		else if (defaultIndex >= defaultCount)
 			defaultIndex = defaultCount - 1
 	}
 	
