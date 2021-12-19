@@ -316,6 +316,11 @@ _checkFileSets ()
         return
     fi
 
+	# if incomplete file set exists - remove it and try again
+	if [ -f "$fileSet/INCOMPLETE" ]; then
+		rm -rf $fileSet
+	fi
+
     # attempt to create file set if it doesn't exist
     if [ ! -d "$fileSet" ]; then
         logMessage "creating file set for $venusVersion"
@@ -387,6 +392,9 @@ _checkFileSets ()
             done
             
             if $matchFound ;then
+				if [ -e "$fileSet/$baseName.orig" ]; then
+					rm -rf "$fileSet/$baseName.orig"
+				fi
                 ln -s "../$otherVersion/$baseName.orig" "$fileSet/$baseName.orig"
                 rm -f "$fileSet/$baseName.NO_ORIG"
                 # if other file set contains a replacement file, link to it

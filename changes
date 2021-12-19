@@ -1,3 +1,14 @@
+v4.0~11:
+	fixed bug that caused GUI to restart repeatedly if package was not
+		compatible with the current Venus version
+		e.g., a file set error
+	major rewrite to PackageManager download code
+	changes to GUI:
+		Add Package -> New Package
+		moved SetpHelper uninstall warning to status
+		moved action confirmaiton message to status,
+			Confirm ... button now reads Proceed
+		removed "can't remove" ... message
 v4.0~10:
 	GitHub downloads and SD/USB transfers now scan the entire directory tree
 		searching for a package directory. This was done because of the 123 smartBMS

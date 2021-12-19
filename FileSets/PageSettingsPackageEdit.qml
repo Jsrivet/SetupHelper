@@ -14,10 +14,12 @@ MbPage {
     property VBusItem defaultCountItem: VBusItem { bind: Utils.path(servicePrefix, "/DefaultCount") }
     property int defaultCount: defaultCountItem.valid ? defaultCountItem.value : 0
     property VBusItem packageCountItem: VBusItem { bind: Utils.path(settingsPrefix, "/Count") }
-    property int count: packageCountItem.valid ? packageCountItem.value : 0
+    property int packageCount: packageCountItem.valid ? packageCountItem.value : 0
     property VBusItem editActionItem: VBusItem { bind: Utils.path(servicePrefix, "/GuiEditAction") }
     property string editAction: editActionItem.valid ? editActionItem.value : ""
     property VBusItem editStatus: VBusItem { bind: Utils.path(servicePrefix, "/GuiEditStatus") }
+    property string packageName: packageNameBox.item.valid ? packageNameBox.item.value : ""
+    property bool isSetupHelper: packageName == "SetupHelper"
 
     property VBusItem rebootNeededItem: VBusItem { bind: getServiceBind ( "RebootNeeded") }
     property bool rebootNeeded: rebootNeededItem.valid && rebootNeededItem.value == 1
@@ -27,7 +29,7 @@ MbPage {
     property VBusItem platformItem: VBusItem { bind: Utils.path(servicePrefix, "/Platform") }
     property string platform: platformItem.valid ? platformItem.value : "??"
 
-    property bool addPackage: requestedAction == 'Add'  && showControls    
+    property bool addPackage: requestedAction == 'add' && showControls    
     property bool showControls: editActionItem.valid
     property bool gitHubValid: gitHubVersion.item.valid && gitHubVersion.item.value.substring (0,1) === "v"
     property bool packageValid: packageVersion.item.valid && packageVersion.item.value.substring (0,1) === "v"
@@ -35,7 +37,8 @@ MbPage {
     property bool downloadOk: gitHubValid && gitHubVersion.item.value != ""
     property bool installOk: packageValid && packageVersion.item.value  != "" && compatible
     property string requestedAction: ""
-    property bool navigate: requestedAction == '' && ! waitForAction && showControls
+    property bool actionPending: requestedAction != ''
+    property bool navigate: ! actionPending && ! waitForAction && showControls
     property bool waitForAction: editAction != '' && showControls
     property bool moreActions: showControls && editAction == 'RebootNeeded'
 
@@ -54,16 +57,17 @@ MbPage {
 	{
 		defaultIndex = 0
 		resetPackageIndex ()
+		resetDefaultIndex ()
 	}
-	onCountChanged: resetPackageIndex ()
+	onPackageCountChanged: resetPackageIndex ()
 	onDefaultCountChanged: resetDefaultIndex ()
 	
 	function resetPackageIndex ()
 	{
 		if (packageIndex < 0)
 			packageIndex = 0
-		else if (packagIndex >= count)
-			packageIndex = count - 1
+		else if (packageIndex >= packageCount)
+			packageIndex = packageCount - 1
 	}
 	
 	function resetDefaultIndex ()
@@ -109,8 +113,8 @@ MbPage {
 		}
 		else
 			packageIndex += 1
-			if (packageIndex >= count)
- 							packageIndex = count - 1
+			if (packageIndex >= packageCount)
+ 							packageIndex = packageCount - 1
    }
     function previousIndex ()
     {
@@ -134,40 +138,42 @@ MbPage {
     }
     function confirm ()
     {
-        if (requestedAction != '')
+        if (actionPending)
         {
-            editActionItem.setValue (requestedAction + ':' + packageName.item.value)
+			// provide local confirmation of action - takes PackageManager too long
+			editStatus.setValue ( requestedAction + "ing " + packageName)
+            editActionItem.setValue (requestedAction + ':' + packageName)
 			requestedAction = ''
         }
-        if (requestedAction == 'Remove')
+        if (requestedAction == 'remove')
         {
 			previousIndex ()
         }
     }
     function install ()
     {
-		requestedAction = 'Install'
+		requestedAction = 'install'
     }
     function uninstall ()
     {
-		requestedAction = 'Uninstall'
+		requestedAction = 'uninstall'
     }
     function gitHubDownload ()
     {
-		requestedAction = 'Download'
+		requestedAction = 'download'
     }
     function add ()
     {
-		requestedAction = 'Add'
+		requestedAction = 'add'
     }
     function remove ()
     {
-		requestedAction = 'Remove'
+		requestedAction = 'remove'
     }
     function signalReboot ()
     {
 		if (editAction == 'RebootNeeded')
-			editActionItem.setValue ( 'Reboot' )
+			editActionItem.setValue ( 'reboot' )
 		
 		requestedAction = ''
 	}
@@ -176,7 +182,7 @@ MbPage {
     {
         MbEditBox
         {
-            id: packageName
+            id: packageNameBox
             description: qsTr ("Package Name")
             maximumLength: 30
             item.bind: getSettingsBind ("PackageName")
@@ -206,7 +212,7 @@ MbPage {
             }
             Text
             {
-                text: "stored:"
+                text: qsTr ("stored:")
                 font.pixelSize: 10
 				show: showControls
             }
@@ -219,7 +225,7 @@ MbPage {
             }
             Text
             {
-                text: rebootNeeded ? "REBOOT\nfor:" : "installed:"
+                text: rebootNeeded ? qsTr ("REBOOT\nfor:") : qsTr ("installed:")
 				horizontalAlignment: Text.AlignRight
 				width: 50
                 font.pixelSize: 10
@@ -238,13 +244,13 @@ MbPage {
 				text:
 				{
 					if (incompatibleReason == 'PLATFORM')
-						return ( "not compatible with\n" + platform )
+						return ( qsTr ("not compatible with\n") + platform )
 					else if (incompatibleReason == 'VERSION')
-						return ( "not compatible with\n" + vePlatform.version )
+						return ( qsTr ("not compatible with\n") + vePlatform.version )
 					else if (incompatibleReason == 'CMDLINE')
-						return ( "must install\nfrom command line" )
+						return qsTr ("must install\nfrom command line" )
 					else
-						return ( "compatible ???" ) // compatible or unknown reason
+						return qsTr ("compatible ???" ) // compatible for unknown reason
 				}
 				horizontalAlignment: Text.AlignHCenter
 				width: 50 + 80 + 3
@@ -280,8 +286,9 @@ MbPage {
             width: 140
             anchors { right: removeButton.left }
             description: ""
-            value: qsTr("Add Package")
+            value: qsTr("New Package")
             onClicked: add ()
+            writeAccessLevel: User.AccessInstaller
             show: navigate
         }
         MbOK
@@ -292,24 +299,9 @@ MbPage {
             description: ""
             value: qsTr("Remove Package")
             onClicked: remove ()
-            show: navigate && ! installedValid && packageName.item.value != "SetupHelper"
+            writeAccessLevel: User.AccessInstaller
+            show: navigate && ! installedValid
         }
-        Text
-        {
-			id: removeDisabled
-            text:
-            {
-				if (packageName.item.value == "SetupHelper")
-					return "SetupHelper uninstall\n CAN NOT BE UNDONE"
-				else
-					return "can't remove\nwhile installed"
-			}
-			width: 170
-			font.pixelSize:12
-            anchors.fill: removeButton
-			horizontalAlignment: Text.AlignHCenter
-            show: navigate && installedValid
-		}
         MbOK
         {
             id: cancelButton
@@ -356,25 +348,34 @@ MbPage {
             width: 375
             anchors { left: parent.left; bottom: addButton.bottom }
             description: ""
-            value:
-            {
-				if (packageName.item.value == "SetupHelper" && requestedAction == 'Uninstall')
-					var warning = qsTr(" CAN'T UNDO")
-				else
-					var warning = ""
-				return qsTr( "Confirm " + requestedAction + " " + packageName.item.value + warning )
-            }
+            value: qsTr ("Proceed")
             onClicked: confirm ()
-            show: showControls && ! navigate && requestedAction != ""
+            show: showControls && ! navigate && actionPending
+            writeAccessLevel: User.AccessInstaller
         }
         Text
         {
             id: statusMessage
-            width: 300
-            anchors { left: parent.left; leftMargin: 10; bottom: addButton.bottom; bottomMargin: 10 }
+            width: 250
+            wrapMode: Text.WordWrap
+            anchors { left: parent.left; leftMargin: 10; bottom: addButton.bottom; bottomMargin: 5 }
             font.pixelSize: 12
-            text: editStatus.valid ? editStatus.value : ""
-            show: waitForAction 
+            color: actionPending && isSetupHelper && ! addPackage ? "red" : "black"
+            text:
+            {
+				if (actionPending)
+				{
+					if (isSetupHelper && requestedAction == 'uninstall')
+						return qsTr ("WARNING: SetupHelper is required for these menus - uninstall anyway ?")
+					else
+						return (requestedAction + " " + packageName + " ?")
+				}
+				else if (editStatus.valid && editStatus.value != "")
+					return editStatus.value
+				else
+					return ""
+			}
+            show: waitForAction || actionPending
         }
 
         // bottom row of buttons
@@ -383,10 +384,23 @@ MbPage {
             id: previousButton
             width: addPackage ? 230 : 100
             anchors { left: parent.left ; top:addButton.bottom }
-            description: addPackage ? "Import Default" : ""
-            value: (addPackage && defaultIndex <= 0) || ( ! addPackage && packageIndex <= 0) ? qsTr ("First") : qsTr("Previous")
+            description: addPackage ? qsTr ("Import Default") : ""
+            value: (addPackage  &&  packageIndex == 0) ? qsTr ("First") : qsTr("Previous")
             onClicked: previousIndex ()
-            show: showControls && ( ! addPackage && packageIndex > 0)
+            show:
+            {
+				if (! showControls)
+					return False
+				else if (addPackage)
+					return true
+				else
+				{
+					if (packageIndex > 0)
+						return true
+					else
+						return false
+				}
+			}
         }
         MbOK
         {
@@ -394,9 +408,22 @@ MbPage {
             width: 75
             anchors { left: previousButton.right; bottom: previousButton.bottom }
             description: ""
-            value: (addPackage && defaultIndex >= defaultCount - 1) || ( ! addPackage && packageIndex >= count - 1) ? qsTr ("Last") : qsTr("Next")
+            value: (addPackage &&  packageIndex == packageCount - 1 )? qsTr ("Last") : qsTr("Next")
             onClicked: nextIndex ()
-            show: showControls && ( ! addPackage && packageIndex < count - 1)
+            show:
+            {
+				if (! showControls)
+					return False
+				else if (addPackage)
+					return true
+				else
+				{
+					if (packageIndex < packageCount - 1)
+						return true
+					else
+						return false
+				}
+			}
         }
         MbOK
         {
@@ -407,6 +434,7 @@ MbPage {
             value: qsTr ("Download")
 			onClicked: gitHubDownload ()
            show: navigate && downloadOk
+            writeAccessLevel: User.AccessInstaller
         }
         MbOK
         {
@@ -417,6 +445,7 @@ MbPage {
             value: qsTr ("Install")
             onClicked: install ()
             show: navigate && installOk 
+            writeAccessLevel: User.AccessInstaller
         }
         MbOK
         {
@@ -427,6 +456,7 @@ MbPage {
             value: qsTr("Uninstall")
             onClicked: uninstall ()
             show: navigate && installedValid
+            writeAccessLevel: User.AccessInstaller
         }
     }
 }
