@@ -1,3 +1,9 @@
+v4.0~12:
+	fixed: manually uninstalled packages would reinstall immediately
+		if auto install was on
+	accommodate Python 2.7 for Venus OS prior to v2.80~10
+	fixed: a setup script run failure was not handled properly and
+		caused the install thread to hang
 v4.0~11:
 	fixed bug that caused GUI to restart repeatedly if package was not
 		compatible with the current Venus version

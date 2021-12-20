@@ -1,4 +1,5 @@
 #!/usr/bin/env python
+# TODO: add package failure doesn't display the OK box
 #
 #	PackageManager.py
 #	Kevin Windrem
@@ -66,12 +67,12 @@ ONE_DOWNLOAD = 3
 #
 #		/GuiEditAction is a text string representing the action
 #		  set by the GUI to trigger an action in PackageManager
-#			'Install' - install package from /data to the Venus working directories
-#			'Uninstall' - uninstall package from the working directories
-#			'Download" - download package from GutHub to /data
-#			'Add' - add package to package list (after GUI sets .../Edit/...
-#			'Remove' - remove package from list TBD ?????
-# 		 	'Reboot' - reboot
+#			'install' - install package from /data to the Venus working directories
+#			'uninstall' - uninstall package from the working directories
+#			'download" - download package from GutHub to /data
+#			'add' - add package to package list (after GUI sets .../Edit/...
+#			'remove' - remove package from list TBD ?????
+# 		 	'reboot' - reboot
 #
 #		the GUI must wait for PackageManager to signal completion of one operation before initiating another
 #
@@ -101,7 +102,6 @@ EXIT_FILE_SET_ERROR	=		252
 EXIT_OPTIONS_NOT_SET =		251
 EXIT_RUN_AGAIN = 			250
 # install states only
-PENDING_OPERATION =			1001
 ERROR_NO_SETUP_FILE = 		999
 #
 #
@@ -112,6 +112,16 @@ ERROR_NO_SETUP_FILE = 		999
 #		/InstallStatus				as above for automatic install/uninstall
 #
 #		/MediaUpdateStatus			as above for SD/USB media transfers
+#
+#		/Platform					a translated version of the platform (aka machine)
+#									machine			Platform
+#									ccgx			CCGX
+#									einstein		Cerbo GX
+#									bealglebone		Venus GX
+#									canvu500		CanVu 500
+#									nanopi			Multi/Easy Solar GX
+#									raspberrypi2	Raspberry Pi 2/3
+#									raspberrypi4	Raspberry Pi 4
 #
 #
 # /Settings/PackageVersion/Edit/ is a section for the GUI to provide information about the a new package to be added
@@ -171,7 +181,18 @@ ERROR_NO_SETUP_FILE = 		999
 #			DbusIf.LOCK () and DbusIf.UNLOCK ()
 #			and must not consume significant time: no sleeping or actions taking seconds or minutes !!!!
 #
-#	Operations that take little time can usually be done in-line (without queuing) 
+#	Operations that take little time can usually be done in-line (without queuing)
+#
+# PackageMonitor manages flag files in the package folder:
+#	REMOVED 					indicates the package was manually removed and PackageManager should not attempt
+#								any automatic operations
+#	DO_NOT_AUTO_INSTALL			indicates the package was manually removed and PackageManager should not attempt
+#								to automatically install it
+#
+#	these flags will be removed when a package is downloaded from GitHub or transferred from SD/USB media
+#	for removed packages this is totally appropriate since the package is being added anywya
+#	for manual removal, this may or may not be desired.
+#		But it is the best choice considering the alternative would be a package that appears to silenty fail to install
 #
 # PackageMonitor checks removable media (SD cards and USB sticks) for package upgrades or even as a new package
 #	File names must be in one of the following forms:
@@ -270,9 +291,9 @@ ERROR_NO_SETUP_FILE = 		999
 
 
 # for timing sections of code
-# t0 = time.perf_counter()
+# t0 = time.time()
 # code to be timed
-# t1 = time.perf_counter()
+# t1 = time.time()
 # logging.info ( "some time %6.3f" % (t1 - t0) )
 
 import platform
@@ -294,8 +315,13 @@ import shutil
 import dbus
 import time
 import re
-import queue
 import glob
+
+# accommodate both Python 2 and 3
+try:
+	import queue
+except ImportError:
+	import Queue as queue
 
 # accommodate both Python 2 and 3
 # if the Python 3 GLib import fails, import the Python 2 gobject
@@ -483,7 +509,7 @@ class AddRemoveClass (threading.Thread):
 	# end PushAction
 
 
-	#	run (the thread), StopThread
+	#	AddRemove run (the thread), StopThread
 	#
 	# run  is a thread that pulls actions from a queue and processes them
 	# Note: some processing times can be several seconds to a minute or more
@@ -1496,17 +1522,24 @@ class DownloadGitHubPackagesClass (threading.Thread):
 	def updateGitHubVersion (self, packageName, gitHubUser, gitHubBranch):
 
 		url = "https://raw.githubusercontent.com/" + gitHubUser + "/" + packageName + "/" + gitHubBranch + "/version"
-
 		try:
-			cmdReturn = subprocess.run (["wget", "-qO", "-", url],\
-					text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+			proc = subprocess.Popen (["wget", "-qO", "-", url],
+							stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 		except:
 			logging.error ("wget for version failed " + packageName)
-			logging.error (cmdReturn.stderr)
-		if cmdReturn.returncode == 0:
-			gitHubVersion = cmdReturn.stdout.strip()
-		else:
 			gitHubVersion = ""
+		else:
+			proc.wait()
+			# convert from binary to string
+			out, err = proc.communicate ()
+			stdout = out.decode ().strip ()
+			stderr = err.decode ().strip ()
+			returnCode = proc.returncode
+			if proc.returncode == 0:
+				gitHubVersion = stdout
+			else:
+				gitHubVersion = ""
+
 		# locate the package with this name and update it's GitHubVersion
 		# if not in the list discard the information
 		DbusIf.LOCK ()
@@ -1587,36 +1620,62 @@ class DownloadGitHubPackagesClass (threading.Thread):
 		DbusIf.UpdateStatus ( message="downloading " + packageName, where=where, logLevel=WARNING )
 		self.SetDownloadPending (packageName)
 
-		url = "https://github.com/" + gitHubUser + "/" + packageName  + "/archive/" + gitHubBranch  + ".tar.gz"
 		# create temp directory specific to this thread
 		tempArchiveFile = tempDirectory + "/temp.tar.gz"
 		# download archive
 		if os.path.exists (tempArchiveFile):
 			os.remove ( tempArchiveFile )
+
+		url = "https://github.com/" + gitHubUser + "/" + packageName  + "/archive/" + gitHubBranch  + ".tar.gz"
 		try:
-			cmdReturn = subprocess.run ( ['wget', '-qO', tempArchiveFile, url ],\
-							text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+			proc = subprocess.Popen ( ['wget', '-qO', tempArchiveFile, url ],\
+										stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 		except:
-			logging.warning ("wget for archive failed " + packageName)
-			logging.warning (cmdReturn.stderr)
+			DbusIf.UpdateStatus ( message="could not get archive on GitHub " + packageName,
+										where=where, logLevel=ERROR )
+			if source == 'GUI':
+				DbusIf.UpdateGuiState ( 'ERROR' )
+			return False
+		else:
+			proc.wait()
+			stdout, stderr = proc.communicate ()
+			# convert from binary to string
+			stdout = stdout.decode ().strip ()
+			stderr = stderr.decode ().strip ()
+			returnCode = proc.returncode
+			logging.warning (stderr)
 			
-		if cmdReturn.returncode != 0:
-			DbusIf.UpdateStatus ( message="can't access" + packageName + ' ' + gitHubUser + ' ' + gitHubBranch + " on GitHub",
-										where=where, logLevel=WARNING )
+		if returnCode != 0:
+			DbusIf.UpdateStatus ( message="could not access" + packageName + ' ' + gitHubUser + ' '\
+										+ gitHubBranch + " on GitHub", where=where, logLevel=WARNING )
 			if source == 'GUI':
 				DbusIf.UpdateGuiState ( 'ERROR' )
 			self.ClearDownloadPending (packageName)
 			shutil.rmtree (tempDirectory)
 			return False
 		try:
-			cmdReturn = subprocess.run ( ['tar', '-xzf', tempArchiveFile, '-C', tempDirectory ],
-										text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+			proc = subprocess.Popen ( ['tar', '-xzf', tempArchiveFile, '-C', tempDirectory ],
+										stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 		except:
-			logging.error ("tar unpack from GitHub failed " + packageName)
-			logging.error (cmdReturn.stderr)
+			DbusIf.UpdateStatus ( message="could not unpack " + packageName + ' ' + gitHubUser + ' ' + gitHubBranch,
+										where=where, logLevel=ERROR )
+			if source == 'GUI':
+				DbusIf.UpdateGuiState ( 'ERROR' )
+			self.ClearDownloadPending (packageName)
+			shutil.rmtree (tempDirectory)
+			return False
 
-		if cmdReturn.returncode != 0:
-			DbusIf.UpdateStatus ( message="can't unpack " + packageName + ' ' + gitHubUser + ' ' + gitHubBranch,
+		proc.wait()
+		stdout, stderr = proc.communicate ()
+		# convert from binary to string
+		stdout = stdout.decode ().strip ()
+		stderr = stderr.decode ().strip ()
+		returnCode = proc.returncode
+		logging.error ("tar unpack from GitHub failed " + packageName)
+		logging.error (stderr)
+
+		if returnCode != 0:
+			DbusIf.UpdateStatus ( message="could not unpack " + packageName + ' ' + gitHubUser + ' ' + gitHubBranch,
 										where=where, logLevel=ERROR )
 			if source == 'GUI':
 				DbusIf.UpdateGuiState ( 'ERROR' )
@@ -1736,7 +1795,7 @@ class DownloadGitHubPackagesClass (threading.Thread):
 	#	implying all versions have been refreshed.
 
 	def refreshGitHubVersion (self):
-		timeToGo = self.versionRefreshDelay + self.lastGitHubVersionRefreshTime - time.perf_counter()
+		timeToGo = self.versionRefreshDelay + self.lastGitHubVersionRefreshTime - time.time()
 		# it's not time to download yet - update status message with countdown
 		# see if it's time - return if not
 		if timeToGo > 0:
@@ -1754,9 +1813,9 @@ class DownloadGitHubPackagesClass (threading.Thread):
 		branch = package.GetGitHubBranch ()
 		self.gitHubVersionPackageIndex += 1
 		DbusIf.UNLOCK ()
-		
+
 		self.updateGitHubVersion (packageName, user, branch)
-		self.lastGitHubVersionRefreshTime = time.perf_counter ()
+		self.lastGitHubVersionRefreshTime = time.time ()
 		return endOfList
 
 	#	DownloadGitHub run (the thread)
@@ -1798,9 +1857,9 @@ class DownloadGitHubPackagesClass (threading.Thread):
 		firstPass = True	# do fast refresh after PackageManager startup
 
 		while self.threadRunning:	# loop forever
-
 			# process priority update if one is set
-			if self.updatePriorityGitHubVersion ():
+			priorityQueueProcessd = self.updatePriorityGitHubVersion ()
+			if priorityQueueProcessd:
 				time.sleep (5.0)
 				continue
 
@@ -1828,7 +1887,7 @@ class DownloadGitHubPackagesClass (threading.Thread):
 			# set version refresh rate and download delay
 			if firstPass or currentMode == ONE_DOWNLOAD or currentMode == FAST_DOWNLOAD:
 				downloadDelay = 10.0
-				self.versionRefreshDelay = 5.0
+				self.versionRefreshDelay = 10.0
 			else:
 				downloadDelay = 600.0
 				self.versionRefreshDelay = 60.0
@@ -1863,7 +1922,7 @@ class DownloadGitHubPackagesClass (threading.Thread):
 
 			if downloadNeeded:
 				# see if it's time
-				timeToGo = downloadDelay + lastAutoDownloadTime - time.perf_counter()
+				timeToGo = downloadDelay + lastAutoDownloadTime - time.time()
 				# it's not time to download yet - update status message with countdown
 				if timeToGo > 0:
 					downloadNeeded = False
@@ -1880,7 +1939,7 @@ class DownloadGitHubPackagesClass (threading.Thread):
 			# do the download here
 			if downloadNeeded:
 				self.GitHubDownload (packageName=package.PackageName, source='AUTO' )
-				lastAutoDownloadTime = time.perf_counter()
+				lastAutoDownloadTime = time.time()
 			time.sleep (5.0)
 		# end while True
 	# end run
@@ -1930,11 +1989,23 @@ class InstallPackagesClass (threading.Thread):
 
 	def InstallPackage ( self, packageName=None, source=None , direction='install' ):
 
+		doNotInstallFile = "/data/" + packageName + "/DO_NOT_AUTO_INSTALL"
+
 		# refresh versions, then check to see if an install is possible
 		DbusIf.LOCK ()
 		package = PackageClass.LocatePackage (packageName)
 		PackageClass.UpdateFileVersions (package)
 		state = package.InstallState
+
+		# set/remove the do not install flag for manual operations
+		if source == 'GUI':
+			# uninstall sets the flag file
+			if direction == 'uninstall':
+				open (doNotInstallFile, 'a').close()
+			# manual install removes the flag file
+			else:
+				if os.path.exists (doNotInstallFile):
+					os.remove (doNotInstallFile)
 
 		if state != EXIT_SUCCESS:
 			logging.error (direction + " blocked - state: " + state)
@@ -1947,8 +2018,17 @@ class InstallPackagesClass (threading.Thread):
 			callBack = None
 
 		setupFile = "/data/" + packageName + "/setup"
-		if os.path.isfile(setupFile) == False:
-			DbusIf.UpdateStatus ( message=packageName + " setup file doesn't exist",
+		if os.path.isfile(setupFile):
+			if os.access(setupFile, os.X_OK) == False:
+				DbusIf.UpdateStatus ( message="setup file for " + packageName + " not executable",
+												where=sendStatusTo, logLevel=ERROR )
+				if source == 'GUI':
+					DbusIf.UpdateGuiState ( 'ERROR' )
+				PackageClass.UpdateInstallStateByPackage (package = package, state=ERROR_NO_SETUP_FILE)
+				DbusIf.UNLOCK ()
+				return
+		else:
+			DbusIf.UpdateStatus ( message="setup file for " + packageName + " doesn't exist",
 											where=sendStatusTo, logLevel=ERROR )
 			if source == 'GUI':
 				DbusIf.UpdateGuiState ( 'ERROR' )
@@ -1958,26 +2038,46 @@ class InstallPackagesClass (threading.Thread):
 
 		DbusIf.UNLOCK ()
 
+		# check the do not install flag before auto-installing
+		if direction == 'install' and source == 'AUTO' and os.path.exists (doNotInstallFile):
+			logging.warning (packageName + " was manually uninstalled - skipping auto install")
+			return
+
+		# provide an innitial status message for the action since it takes a while for PackageManager
+		#	to fill in EditStatus
+		# this provides immediate user feedback that the button press was detected
 		DbusIf.UpdateStatus ( message=direction + "ing " + packageName, where=sendStatusTo )
 		try:
-			cmdReturn = subprocess.run ( [ setupFile, direction, 'deferReboot' ], timeout=120,
-					text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE )
-		# failure handled below
+			proc = subprocess.Popen ( [ setupFile, direction, 'deferReboot' ],
+										stdout=subprocess.PIPE, stderr=subprocess.PIPE )
 		except:
-			pass
+			DbusIf.UpdateStatus ( message="could not run setup file for " + packageName,
+										where=sendStatusTo, logLevel=ERROR )
+			if source == 'GUI':
+				DbusIf.UpdateGuiState ( 'ERROR' )
+			return
+		proc.wait()
+		stdout, stderr = proc.communicate ()
+		# convert from binary to string
+		stdout = stdout.decode ().strip ()
+		stderr = stderr.decode ().strip ()
+		returnCode = proc.returncode
 
 		# manage the result of the setup run while locked just in case
 		DbusIf.LOCK ()
 
 		package = PackageClass.LocatePackage (packageName)
-		PackageClass.UpdateInstallStateByPackage (package = package, state=cmdReturn.returncode)
 
-		if cmdReturn.returncode == EXIT_SUCCESS:
+		# set the InstallState with the setup script return code which is appropirate except for 
+		#	ERROR_NO_SETUP_FILE which is set above
+		PackageClass.UpdateInstallStateByPackage (package = package, state=returnCode)
+
+		if returnCode == EXIT_SUCCESS:
 			package.SetIncompatible ('')	# this marks the package as compatible
 			DbusIf.UpdateStatus ( message="", where=sendStatusTo )
 			if source == 'GUI':
 				DbusIf.UpdateGuiState ( '' )
-		elif cmdReturn.returncode == EXIT_REBOOT:
+		elif returnCode == EXIT_REBOOT:
 			# set package RebootNeeded so GUI can show the need - does NOT trigger a reboot
 			package.SetRebootNeeded (True)
 
@@ -1991,40 +2091,40 @@ class InstallPackagesClass (threading.Thread):
 				SystemReboot = True
 				DbusIf.UNLOCK ()
 				return
-		elif cmdReturn.returncode == EXIT_RUN_AGAIN:
+		elif returnCode == EXIT_RUN_AGAIN:
 			DbusIf.UpdateStatus ( message=packageName + " setup must be run from command line",
 											where=sendStatusTo, logLevel=WARNING )
 			if source == 'GUI':
 				DbusIf.UpdateGuiState ( 'ERROR' )
-		elif cmdReturn.returncode == EXIT_INCOMPATIBLE_VERSION:
+		elif returnCode == EXIT_INCOMPATIBLE_VERSION:
 			global VenusVersion
 			package.SetIncompatible ('VERSION')
 			DbusIf.UpdateStatus ( message=packageName + " not compatible with Venus " + VenusVersion,
 											where=sendStatusTo, logLevel=WARNING )
 			if source == 'GUI':
 				DbusIf.UpdateGuiState ( 'ERROR' )
-		elif cmdReturn.returncode == EXIT_INCOMPATIBLE_PLATFOM:
+		elif returnCode == EXIT_INCOMPATIBLE_PLATFOM:
 			global Platform
 			package.SetIncompatible ('PLATFORM')
 			DbusIf.UpdateStatus ( message=packageName + " " + direction + " not compatible with " + Platform,
 											where=sendStatusTo, logLevel=WARNING )
 			if source == 'GUI':
 				DbusIf.UpdateGuiState ( 'ERROR' )
-		elif cmdReturn.returncode == EXIT_OPTIONS_NOT_SET:
+		elif returnCode == EXIT_OPTIONS_NOT_SET:
 			DbusIf.UpdateStatus ( message=packageName + " " + direction + " setup must be run from the command line",
 											where=sendStatusTo, logLevel=WARNING )
 			if source == 'GUI':
 				DbusIf.UpdateGuiState ( 'ERROR' )
-		elif cmdReturn.returncode == EXIT_FILE_SET_ERROR:
+		elif returnCode == EXIT_FILE_SET_ERROR:
 			DbusIf.UpdateStatus ( message=packageName + " file set incomplete",
 											where=sendStatusTo, logLevel=ERROR )
 			if source == 'GUI':
 				DbusIf.UpdateGuiState ( 'ERROR' )
 		# unknown error
-		elif cmdReturn.returncode != 0:
-			DbusIf.UpdateStatus ( message=packageName + " " + direction + " unknown error " + str (cmdReturn.returncode),
+		elif returnCode != 0:
+			DbusIf.UpdateStatus ( message=packageName + " " + direction + " unknown error " + str (returnCode),
 											where=sendStatusTo, logLevel=ERROR )
-			logging.error (cmdReturn.stderr)
+			logging.error (stderr)
 			if source == 'GUI':
 				DbusIf.UpdateGuiState ( 'ERROR' )
 
@@ -2056,22 +2156,6 @@ class InstallPackagesClass (threading.Thread):
 			return False
 		else:
 			return True
-
-
-	#	run (the thread)
-	#
-	# automatic install packages
-	#	pushes request on queue for processing later in another thread
-	#		this allows this to run quickly while the package list is locked
-	#
-	# run () checks the threadRunning flag and returns if it is False,
-	#	essentially taking the thread off-line
-	#	the main method should catch the tread with join ()
-	# StopThread () is called to shut down the thread
-
-	def StopThread (self):
-		logging.info ("attempting to stop InstallPackages thread")
-		self.threadRunning = False
 
 
 	#	processInstallQueue
@@ -2112,6 +2196,21 @@ class InstallPackagesClass (threading.Thread):
 			logging.error ("received invalid command from Install queue: ", command )
 			return False
 
+
+	#	InstallPackage run (the thread)
+	#
+	# automatic install packages
+	#	pushes request on queue for processing later in another thread
+	#		this allows this to run quickly while the package list is locked
+	#
+	# run () checks the threadRunning flag and returns if it is False,
+	#	essentially taking the thread off-line
+	#	the main method should catch the tread with join ()
+	# StopThread () is called to shut down the thread
+
+	def StopThread (self):
+		logging.info ("attempting to stop InstallPackages thread")
+		self.threadRunning = False
 	def run (self):
 		while self.threadRunning:
 			# if processed a install/uninstall request from the GUI, skip auto installs until next pass
@@ -2159,7 +2258,6 @@ class InstallPackagesClass (threading.Thread):
 
 class MediaScanClass (threading.Thread):
 
-
 	# transferPackage unpacks the archive and moves it into postion in /data
 	#
 	#	path is the full path to the archive
@@ -2177,14 +2275,26 @@ class MediaScanClass (threading.Thread):
 
 		# unpack the archive - result is placed in tempDirectory
 		try:
-			cmdReturn = subprocess.run ( ['tar', '-xzf', path, '-C', tempDirectory ],
-										text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+			proc = subprocess.Popen ( ['tar', '-xzf', path, '-C', tempDirectory ],
+										stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 		except:
-			logging.error ("tar unpack from SD/USB failed " + packageName)
-			logging.error (cmdReturn.stderr)
-		if cmdReturn.returncode != 0:
-			logging.error ( "can't unpack " + packageName + " from SD/USB media" )
+			DbusIf.UpdateStatus ( message="tar failed for " + packageName,
+									where='Media', logLevel=ERROR)
+			time.sleep (5.0)
+			DbusIf.UpdateStatus ( message="", where='Media')
+			return False
+		proc.wait()
+		stdout, stderr = proc.communicate ()
+		# convert from binary to string
+		stdout = stdout.decode ().strip ()
+		stderr = stderr.decode ().strip ()
+		returnCode = proc.returncode
+		if returnCode != 0:
+			DbusIf.UpdateStatus ( message="could not unpack " + packageName + " from SD/USB media",
+									where='Media', logLevel=ERROR)
 			shutil.rmtree (tempDirectory)
+			time.sleep (5.0)
+			DbusIf.UpdateStatus ( message="", where='Media')
 			return False
 
 		# attempt to locate a package directory in the tree below tempDirectory
@@ -2192,6 +2302,8 @@ class MediaScanClass (threading.Thread):
 		if unpackedPath == None:
 			logging.warning (packageName + " archive doesn't contain a package directory - rejected" )
 			shutil.rmtree (tempDirectory)
+			time.sleep (5.0)
+			DbusIf.UpdateStatus ( message="", where='Media')
 			return False
 
 		# TODO: do we want to compare versions and only replace the stored version if
@@ -2205,12 +2317,12 @@ class MediaScanClass (threading.Thread):
 		tempPackagePath = packagePath + "-temp"
 		DbusIf.LOCK () 
 		if os.path.exists (tempPackagePath):
-			shutil.rmtree (tempPackagePath, ignore_errors=True)	# like rm -rf		
+			shutil.rmtree (tempPackagePath, ignore_errors=True)	# like rm -rf
 		if os.path.exists (packagePath):
 			os.rename (packagePath, tempPackagePath)
 		shutil.move (unpackedPath, packagePath)
 		if os.path.exists (tempPackagePath):
-			shutil.rmtree (tempPackagePath, ignore_errors=True)	# like rm -rf		
+			shutil.rmtree (tempPackagePath, ignore_errors=True)	# like rm -rf
 		DbusIf.UNLOCK ()
 		shutil.rmtree (tempDirectory, ignore_errors=True)
 		time.sleep (5.0)
@@ -2249,7 +2361,10 @@ class MediaScanClass (threading.Thread):
 		alreadyScanned = []
 
 		while self.threadRunning:
-			drives = os.listdir (root)
+			try:
+				drives = os.listdir (root)
+			except:
+				drives = []
 
 			# if previously detected media is removed,
 			#	allow it to be scanned again when reinserted
@@ -2319,8 +2434,6 @@ def	AutoRebootCheck ():
 	actionsPending = False
 	for package in PackageClass.PackageList:
 		# check for operations pending
-		if package.InstallState == PENDING_OPERATION:
-			actionsPending = True
 		if package.DownloadPending:
 			actionsPending = True
 	if SystemReboot and actionsPending == False:
@@ -2335,14 +2448,13 @@ def mainLoop():
 	global rebootNow
 
 	PackageClass.AddStoredPackages ()
-	
 	PackageClass.UpdateAllFileVersions ()
 
-	AutoRebootCheck ()
+	rebootNeeded = AutoRebootCheck ()
 
 	# reboot checks indicates it's time to reboot
 	# quit the mainloop which will cause main to continue past mainloop.run () call in main
-	if AutoRebootCheck ():
+	if rebootNeeded:
 		DbusIf.UpdateStatus ( message="REBOOTING ...", where='Download' )
 		DbusIf.UpdateStatus ( message="REBOOTING ...", where='Editor' )
 
@@ -2475,19 +2587,17 @@ def main():
 		logging.warning ("REBOOTING: to complete package installation")
 
 		try:
-			subprocess.run ( [ 'shutdown', '-r', 'now', 'rebooting to complete package installation' ] )
-			# for debug:    subprocess.run ( [ 'shutdown', '-k', 'now', 'simulated reboot - system staying up' ] )
+			proc = subprocess.Popen ( [ 'shutdown', '-r', 'now', 'rebooting to complete package installation' ] )
+			# for debug:    proc = subprocess.Popen ( [ 'shutdown', '-k', 'now', 'simulated reboot - system staying up' ] )
 		except:
 			logging.critical ("shutdown failed")
-			logging.critical (cmdReturn.stderr)
 
 		# insure the package manager service doesn't restart when we exit
 		#	it will start up again after the reboot
 		try:
-			subprocess.run ( [ 'svc', '-o', '/service/PackageManager' ], text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+			proc = subprocess.Popen ( [ 'svc', '-o', '/service/PackageManager' ], text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 		except:
 			logging.critical ("svc to shutdown PackageManager failed")
-			logging.critical (cmdReturn.stderr)
 
 	logging.critical (">>>> PackageMonitor exiting")
 

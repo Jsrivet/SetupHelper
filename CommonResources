@@ -582,8 +582,8 @@ fi
 # to its new name ...installedVersionFile...
 if [ ! -f "$installedVersionFile" ] && [  -f "$installedFlag" ]; then
 	installedVersion=$(cat "$installedFlag")
-	if [ -z $ installedVersion ]; then
-		installedVersion = "unknown"
+	if [ -z $installedVersion ]; then
+		installedVersion="unknown"
 	else
 		echo $installedVersion > "$installedVersionFile"
 	fi
