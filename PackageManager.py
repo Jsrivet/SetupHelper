@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-# TODO: add package failure doesn't display the OK box
+# TODO: change /Settings/PackageMonitor to PackageManager ???????? (huge change and data will be lost)
 #
 #	PackageManager.py
 #	Kevin Windrem
@@ -42,7 +42,7 @@ ONE_DOWNLOAD = 3
 #
 # Additional (volatile) parameters linking packageManager and the GUI are provided in a separate dbus service:
 #
-#	com.victronenergy.packageMonitor parameters
+#	com.victronenergy.packageManager parameters
 #		/Package/n/GitHubVersion 					from GitHub
 #		/Package/n/PackageVersion 					from /data <packageName>/version from the package directory
 #		/Package/n/InstalledVersion 				from /etc/venus/isInstalled-<packageName>
@@ -475,7 +475,6 @@ class AddRemoveClass (threading.Thread):
 	#	to be handle in mainLoop
 # TODO: need to update GUI status since queue pull is too late for timely ack to request
 	def PushAction (self, command=None):
-
 		parts = command.split (":")
 		action = parts[0]
 		if action == 'download':
@@ -490,6 +489,7 @@ class AddRemoveClass (threading.Thread):
 		elif action == 'reboot':
 			logging.warning ( "received Reboot request from " + 'GUI')
 			# set the flag - reboot is done in main_loop
+			global SystemReboot
 			SystemReboot = True
 		# ignore blank action - this occurs when PackageManager changes the action on dBus to 0
 		#	which acknowledges a GUI action
@@ -746,7 +746,7 @@ class DbusIfClass:
 								timeout = 10, eventCallback=None )
 
 
-		self.DbusService = VeDbusService ('com.victronenergy.packageMonitor', bus = dbus.SystemBus())
+		self.DbusService = VeDbusService ('com.victronenergy.packageManager', bus = dbus.SystemBus())
 		self.DbusService.add_mandatory_paths (
 							processname = 'PackageMonitor', processversion = 1.0, connection = 'none',
 							deviceinstance = 0, productid = 1, productname = 'Package Monitor',
@@ -791,7 +791,7 @@ class DbusIfClass:
 	#  deletes the dbus service
 
 	def RemoveDbusService (self):
-		logging.warning ("shutting down com.victronenergy.packageMonitor dbus service")
+		logging.warning ("shutting down com.victronenergy.packageManager dbus service")
 		self.DbusService.__del__()
 	
 # end DbusIf
@@ -1858,8 +1858,8 @@ class DownloadGitHubPackagesClass (threading.Thread):
 
 		while self.threadRunning:	# loop forever
 			# process priority update if one is set
-			priorityQueueProcessd = self.updatePriorityGitHubVersion ()
-			if priorityQueueProcessd:
+			priorityVersionProcessd = self.updatePriorityGitHubVersion ()
+			if priorityVersionProcessd:
 				time.sleep (5.0)
 				continue
 
@@ -2002,9 +2002,11 @@ class InstallPackagesClass (threading.Thread):
 			# uninstall sets the flag file
 			if direction == 'uninstall':
 				open (doNotInstallFile, 'a').close()
+				logging.warning (packageName + " was manually uninstalled - auto install for that package will be skipped")
 			# manual install removes the flag file
 			else:
 				if os.path.exists (doNotInstallFile):
+					logging.warning (packageName + " was manually installed - allowing auto install for that package")
 					os.remove (doNotInstallFile)
 
 		if state != EXIT_SUCCESS:
@@ -2040,7 +2042,6 @@ class InstallPackagesClass (threading.Thread):
 
 		# check the do not install flag before auto-installing
 		if direction == 'install' and source == 'AUTO' and os.path.exists (doNotInstallFile):
-			logging.warning (packageName + " was manually uninstalled - skipping auto install")
 			return
 
 		# provide an innitial status message for the action since it takes a while for PackageManager
@@ -2526,7 +2527,7 @@ def main():
 			Platform = machine
 		file.close()
 
-	# initialze dbus Settings and com.victronenergy.packageMonitor
+	# initialze dbus Settings and com.victronenergy.packageManager
 	global DbusIf
 	DbusIf = DbusIfClass ()
 

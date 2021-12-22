@@ -8,7 +8,7 @@ MbPage {
 	id: root
 	title: qsTr("Package Manager")
     property string settingsPrefix: "com.victronenergy.settings/Settings/PackageMonitor"
-    property string servicePrefix: "com.victronenergy.packageMonitor"
+    property string servicePrefix: "com.victronenergy.packageManager"
     VBusItem { id: downloadStatus; bind: Utils.path(servicePrefix, "/GitHubUpdateStatus") }
     VBusItem { id: installStatus; bind: Utils.path(servicePrefix, "/InstallStatus") }
     property bool showInstallStatus: installStatus.valid && installStatus.value != ""

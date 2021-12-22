@@ -8,7 +8,7 @@ MbPage {
 	id: root
 	title: platformItem.valid ? qsTr("Package Editor") : qsTr ("Package Manager not running")
     property string settingsPrefix: "com.victronenergy.settings/Settings/PackageMonitor"
-    property string servicePrefix: "com.victronenergy.packageMonitor"
+    property string servicePrefix: "com.victronenergy.packageManager"
     property int packageIndex: 0
     property int defaultIndex:0
     property VBusItem defaultCountItem: VBusItem { bind: Utils.path(servicePrefix, "/DefaultCount") }

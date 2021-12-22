@@ -1,13 +1,7 @@
 New: SetupHelper includes a GUI based package mananager
 
-The SetupHelper package provides:
-    a mechanism to automatically reinstall packages following a Venus OS update
-    an automatic update mechanism to keep packages up to date
-        from GitHub archives or USB stick
-	control of the automatic download and install from the GUI
-	add and remove packages from the system
-	manual download, install, uninstall from the GUI
-    an "blind" install of SetupHelper from SD/USB media
+The SetupHelper package provides:\n    a mechanism to automatically reinstall packages following a Venus OS update\n    an automatic update mechanism to keep packages up to date\n        from GitHub archives or USB stick\n	control of the automatic download and install from the GUI\n	add and remove packages from the system\n	manual download, install, uninstall from the GUI\n
+    an "blind" install of SetupHelper from SD/USB media\n
 
 SetupHelper is also required for my other packages
 	and must be installed BEFORE running the other package setup scripts
