@@ -1,5 +1,4 @@
 #!/usr/bin/env python
-# TODO: change /Settings/PackageMonitor to PackageManager ???????? (huge change and data will be lost)
 #
 #	PackageManager.py
 #	Kevin Windrem
@@ -16,13 +15,13 @@
 # Persistent storage for packageManager is stored in dbus Settings:
 #
 #	com.victronenergy.Settings parameters for each package:
-#		/Settings/PackageMonitor/n/PackageName		can be edited by the GUI only when adding a new package
-#		/Settings/PackageMonitor/n/GitHubUser		can be edited by the GUI
-#		/Settings/PackageMonitor/n/GitHubBranch		can be edited by the GUI
-#		/Settings/PackageMonitor/Count				the number of ACTIVE packages (0 <= n < Count)
-#		/Settings/PackageMonitor/Edit/...			GUI edit package set
+#		/Settings/PackageManager/n/PackageName		can be edited by the GUI only when adding a new package
+#		/Settings/PackageManager/n/GitHubUser		can be edited by the GUI
+#		/Settings/PackageManager/n/GitHubBranch		can be edited by the GUI
+#		/Settings/PackageManager/Count				the number of ACTIVE packages (0 <= n < Count)
+#		/Settings/PackageManager/Edit/...			GUI edit package set
 #
-#		/Settings/PackageMonitor/GitHubAutoDownload 	set by the GUI to control automatic updates from GitHub
+#		/Settings/PackageManager/GitHubAutoDownload 	set by the GUI to control automatic updates from GitHub
 #			0 - no GitHub auto downloads (version checks still occur)
 #			1 - normal updates - one download every 10 minutes
 #			2 - fast updates - one download update every 10 seconds, then at the normal rate after one pass
@@ -36,7 +35,7 @@ NORMAL_DOWNLOAD = 1
 FAST_DOWNLOAD = 2
 ONE_DOWNLOAD = 3
 
-#		/Settings/PackageMonitor/AutoInstall
+#		/Settings/PackageManager/AutoInstall
 #			0 - no automatic install
 #			1 - automatic install after download from GitHub or SD/USB
 #
@@ -88,7 +87,7 @@ ONE_DOWNLOAD = 3
 #			'RebootNeeded' - reboot needed
 #				GUI choices:
 #					Do it now
-#						GUI sends reboot command to PackageMonitor
+#						GUI sends reboot command to PackageManager
 #					Defer
 #						GUI sets action to 0
 #
@@ -153,13 +152,13 @@ ERROR_NO_SETUP_FILE = 		999
 #	If the package on GitHub can't be accessed, GitHubVersion will be blank
 #
 #
-# PackageMonitor downloads packages from GitHub based on the GitHub version and package (stored) versions:
+# PackageManager downloads packages from GitHub based on the GitHub version and package (stored) versions:
 #	if the GitHub branch is a specific version, the download occurs if the versions differ
 #		otherwise the GitHub version must be newer.
 #	the archive file is unpacked to a directory in /data named
 # 		 <packageName>-<gitHubBranch>.tar.gz, then moved to /data/<packageName>, replacing the original
 #
-# PackageMonitor installs the stored verion if the package (stored) and installed versions differ
+# PackageManager installs the stored verion if the package (stored) and installed versions differ
 #
 # Manual downloads and installs triggered from the GUI ignore version checks completely
 #
@@ -183,7 +182,7 @@ ERROR_NO_SETUP_FILE = 		999
 #
 #	Operations that take little time can usually be done in-line (without queuing)
 #
-# PackageMonitor manages flag files in the package folder:
+# PackageManager manages flag files in the package folder:
 #	REMOVED 					indicates the package was manually removed and PackageManager should not attempt
 #								any automatic operations
 #	DO_NOT_AUTO_INSTALL			indicates the package was manually removed and PackageManager should not attempt
@@ -194,7 +193,7 @@ ERROR_NO_SETUP_FILE = 		999
 #	for manual removal, this may or may not be desired.
 #		But it is the best choice considering the alternative would be a package that appears to silenty fail to install
 #
-# PackageMonitor checks removable media (SD cards and USB sticks) for package upgrades or even as a new package
+# PackageManager checks removable media (SD cards and USB sticks) for package upgrades or even as a new package
 #	File names must be in one of the following forms:
 #		<packageName>-<gitHubBranch or version>.tar.gz
 #		<packageName>-install.tar.gz
@@ -205,7 +204,7 @@ ERROR_NO_SETUP_FILE = 		999
 #		if not, the unpacked archive directory is deleted
 #
 #
-#	PackageMonitor scans /data looking for new packages
+#	PackageManager scans /data looking for new packages
 #		directory names must not appear to be an archive
 #			(include a GitHub branch or version number) (see rejectList below for specifics)
 #		the directory must contain a valid version
@@ -246,9 +245,9 @@ ERROR_NO_SETUP_FILE = 		999
 #	PackageClass
 #		PackageList [] one per package
 #		LocatePackage ()
-#			RemoveDbusSettings ()
-#			settingChangedHandler ()
-#			various Gets and Sets
+#		RemoveDbusSettings ()
+#		settingChangedHandler ()
+#		various Gets and Sets
 #		AddPackagesFromDbus ()
 #		AddDefaultPackages ()
 #		AddStoredPackages ()
@@ -572,6 +571,8 @@ class AddRemoveClass (threading.Thread):
 #		LocateDefaultPackage
 #		handleGuiEditAction
 #		UpdatePackageCount
+#		RemoveDbusSettings
+#		TransferOldDbusPackageInfo
 #		various Gets and Sets for dbus parameters
 #		LOCK
 #		UNLOCK
@@ -608,6 +609,129 @@ class AddRemoveClass (threading.Thread):
 #		rather than pulling from dbus or reading the file again
 
 class DbusIfClass:
+
+
+	#		RemoveDbusSettings
+	# remove the dbus Settings paths for package
+	# package Settings are removed
+	# this is called when removing a package
+	# settings to be removed are passed as a list (settingsList)
+	# this gets reformatted for the call to dbus
+
+	@classmethod
+	def RemoveDbusSettings (cls, settingsList):
+
+		# format the list of settings to be removed
+		i = 0
+		while i < len (settingsList):
+			if i == 0:
+				settingsToRemove = '%[ "' + settingsList[i]
+			else:
+				settingsToRemove += '" , "' + settingsList[i]
+			i += 1
+		settingsToRemove += '" ]'
+
+		# remove the dbus Settings paths - via the command line 
+		try:
+			proc = subprocess.Popen (['dbus', '-y', 'com.victronenergy.settings', '/', 'RemoveSettings', settingsToRemove  ], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+		except:
+			logging.error ("dbus RemoveSettings call failed")
+		else:
+			proc.wait()
+			# convert from binary to string
+			out, err = proc.communicate ()
+			stdout = out.decode ().strip ()
+			stderr = err.decode ().strip ()
+			returnCode = proc.returncode
+			if returnCode != 0:
+				logging.error ("dbus RemoveSettings failed " + str (returnCode))
+				logging.error (stderr)
+
+
+	#	TransferOldDbusPackageInfo
+	# PackageManager dbus storage was moved
+	# from ...PackageMonitor... to ...PackageManager...
+	# this method moves the info to the new location and deleted the old Settings
+	# this assumes the new dbus environment is already set up
+	# the transfer is only done if the new location has no packages
+	# should only be called from initialization so we don't LOCK while accessing the package list
+
+
+	@classmethod
+	def TransferOldDbusPackageInfo (cls):
+		bus = dbus.SystemBus()
+		oldPath = "/Settings/PackageMonitor"
+		newPath = "/Settings/PackageManager"
+		try:
+			oldCount = bus.get_object("com.victronenergy.settings", oldPath + "/Count").GetValue()
+		# nothing to tranfer/delete
+		except:
+			return
+
+
+		try:
+			newCount = bus.get_object("com.victronenergy.settings", newPath + "/Count").GetValue()
+		except:
+			logging.error ("PackageManager dbus Settings has no package count")
+			return
+
+		# if the new dbus info has no packages, transfer them from the old location
+		if newCount == 0:
+			transferPackages = True
+		else:
+			transferPackages = False
+
+		logging.warning ("moving PackageManager dbus settings from old location")
+		
+		# remove package-related Settings
+		i = 0
+		while i < oldCount:
+			oldNamePath = oldPath + '/' + str (i) + "/PackageName"
+			oldUserPath = oldPath + '/' + str (i) + "/GitHubUser"
+			oldBranchPath = oldPath + '/' + str (i) + "/GitHubBranch"
+
+			# create a new package and transfer old info to it
+			try:
+				name = bus.get_object("com.victronenergy.settings", oldNamePath).GetValue ()
+			except:
+				name = None
+			if transferPackages and name != None:
+				logging.warning ("moving " + name + " settings")
+				PackageClass.AddPackage (packageName=name, source='INIT')
+				package = PackageClass.LocatePackage (name)
+				try:
+					user = bus.get_object("com.victronenergy.settings", (oldUserPath)).GetValue ()
+				except:
+					user = "?"
+				else:
+					package.SetGitHubUser (user)
+				try:
+					branch = bus.get_object("com.victronenergy.settings", oldBranchPath).GetValue ()
+				except:
+					branch = "?"
+				else:
+					package.SetGitHubBranch (branch)
+
+			# remove the old package-related dbus Settings
+			cls.RemoveDbusSettings ( [oldNamePath, oldUserPath, oldBranchPath ] )
+			i += 1
+
+		# transfer and remove Settings not part of a package
+		if transferPackages:
+			
+			DbusIf.SetAutoInstall ( bus.get_object("com.victronenergy.settings",
+							oldPath + "/AutoInstall").GetValue () )
+			DbusIf.SetAutoDownload ( bus.get_object("com.victronenergy.settings",
+							oldPath + "/GitHubAutoDownload").GetValue () )
+		otherSettings = [oldPath + "/AutoInstall",
+							oldPath + "/GitHubAutoDownload",
+							oldPath + "/Edit/GitHubBranch",
+							oldPath + "/Edit/GitHubUser",
+							oldPath + "/Edit/PackageName",
+							oldPath + "/Count"
+						]
+		cls.RemoveDbusSettings ( otherSettings )
+
 	
 	#	UpdateGuiState
 	#
@@ -688,6 +812,8 @@ class DbusIfClass:
 		return self.DbusSettings['autoDownload']
 	def GetAutoInstall (self):
 		return self.DbusSettings['autoInstall']
+	def SetAutoInstall (self, value):
+		self.DbusSettings['autoInstall'] = value
 	def SetGitHubUpdateStatus (self, value):
 		self.DbusService['/GitHubUpdateStatus'] = value
 	def SetInstallStatus (self, value):
@@ -738,9 +864,9 @@ class DbusIfClass:
 	def __init__(self):
 		self.lock = threading.RLock()
 
-		settingsList = {'packageCount': [ '/Settings/PackageMonitor/Count', 0, 0, 0 ],
-						'autoDownload': [ '/Settings/PackageMonitor/GitHubAutoDownload', 0, 0, 0 ],
-						'autoInstall': [ '/Settings/PackageMonitor/AutoInstall', 0, 0, 0 ],
+		settingsList = {'packageCount': [ '/Settings/PackageManager/Count', 0, 0, 0 ],
+						'autoDownload': [ '/Settings/PackageManager/GitHubAutoDownload', 0, 0, 0 ],
+						'autoInstall': [ '/Settings/PackageManager/AutoInstall', 0, 0, 0 ],
 						}
 		self.DbusSettings = SettingsDevice(bus=dbus.SystemBus(), supportedSettings=settingsList,
 								timeout = 10, eventCallback=None )
@@ -748,7 +874,7 @@ class DbusIfClass:
 
 		self.DbusService = VeDbusService ('com.victronenergy.packageManager', bus = dbus.SystemBus())
 		self.DbusService.add_mandatory_paths (
-							processname = 'PackageMonitor', processversion = 1.0, connection = 'none',
+							processname = 'PackageManager', processversion = 1.0, connection = 'none',
 							deviceinstance = 0, productid = 1, productname = 'Package Monitor',
 							firmwareversion = 1, hardwareversion = 0, connected = 1)
 		self.DbusService.add_path ( '/GitHubUpdateStatus', "", writeable = True )
@@ -803,7 +929,6 @@ class DbusIfClass:
 #
 #	Methods:
 #		LocatePackage
-#		RemoveDbusSettings
 #		various Gets and Sets
 #		AddPackagesFromDbus (class method)
 #		AddDefaultPackages (class method)
@@ -855,7 +980,8 @@ class PackageClass:
 
 	def SetPackageName (self, newName):
 		self.DbusSettings['packageName'] = newName
-	
+		self.PackageName = newName
+
 	def SetInstalledVersion (self, version):
 		if self.installedVersionPath != "":
 			DbusIf.DbusService[self.installedVersionPath] = version	
@@ -880,6 +1006,15 @@ class PackageClass:
 			return DbusIf.DbusService[self.gitHubVersionPath]
 		else:
 			return None
+
+	def SetGitHubUser (self, user):
+		self.DbusSettings['gitHubUser'] = user
+	def GetGitHubUser (self):
+		return self.DbusSettings['gitHubUser']
+	def SetGitHubBranch (self, user):
+		self.DbusSettings['gitHubBranch'] = user
+	def GetGitHubBranch (self):
+		return self.DbusSettings['gitHubBranch']
 
 	def SetIncompatible(self, value):
 		if self.incompatiblePath != "":
@@ -919,26 +1054,6 @@ class PackageClass:
 	def GetGitHubBranch (self):
 		return self.DbusSettings['gitHubBranch']
 
-	# remove the dbus settings for this package
-	# package Settings are removed
-	# package service parameters are just set to ""
-	#
-	# can't actually remove settings cleanly
-	#	so just set contents to null/False
-
-	def RemoveDbusSettings (self):
-
-		self.SetPackageName ("?")
-		self.SetGitHubUser ("?")
-		self.SetGitHubBranch ("?")
-		self.SetGitHubVersion ("?")
-		self.SetInstalledVersion ("?")
-		self.SetPackageVersion ("?")
-		self.SetRebootNeeded (False)
-		self.SetIncompatible ( '' )
-		self.DownloadPending = False
-		self.InstallState = EXIT_SUCCESS
-
 
 	def settingChangedHandler (self, name, old, new):
 		# when GitHub information changes, need to refresh GitHub version for this package
@@ -958,7 +1073,7 @@ class PackageClass:
 			self.rebootNeededPath = '/Package/' + section + '/RebootNeeded'
 			self.incompatiblePath = '/Package/' + section + '/Incompatible'
 
-			# create paths if they dont currently exist
+			# create service paths if they don't already exist
 			try:
 				foo = DbusIf.DbusService[self.installedVersionPath]
 			except:
@@ -981,9 +1096,9 @@ class PackageClass:
 				DbusIf.DbusService.add_path (self.incompatiblePath, "" )
 
 
-		self.packageNamePath = '/Settings/PackageMonitor/' + section + '/PackageName'
-		self.gitHubUserPath = '/Settings/PackageMonitor/' + section + '/GitHubUser'
-		self.gitHubBranchPath = '/Settings/PackageMonitor/' + section + '/GitHubBranch'
+		self.packageNamePath = '/Settings/PackageManager/' + section + '/PackageName'
+		self.gitHubUserPath = '/Settings/PackageManager/' + section + '/GitHubUser'
+		self.gitHubBranchPath = '/Settings/PackageManager/' + section + '/GitHubBranch'
 
 		settingsList =	{'packageName': [ self.packageNamePath, '', 0, 0 ],
 						'gitHubUser': [ self.gitHubUserPath, '', 0, 0 ],
@@ -999,15 +1114,15 @@ class PackageClass:
 		else:
 			self.PackageName = self.DbusSettings['packageName']
 		
-		# these flags are used to insure multiple actions aren't pushed onto the processing queue
 		self.section = section
+		# these flags are used to insure multiple actions aren't executed on top of each other
 		self.DownloadPending = False
 		self.InstallState = EXIT_SUCCESS
 
 
 	# dbus Settings is the primary non-volatile storage for packageManager
 	# upon startup, PackageList [] is empty and we need to populate it
-	# from previous dBus Settings in /Settings/PackageMonitor/...
+	# from previous dBus Settings in /Settings/PackageManager/...
 	# this is a special case that can't use AddPackage below:
 	#	we do not want to create any new Settings !!
 	#	it should be "safe" to limit the serch to 0 to < packageCount
@@ -1015,15 +1130,18 @@ class PackageClass:
 	#
 	# NOTE: this method is called before threads are created so do not LOCK
 	#
-	# returns False if couldn't get the package cound from dbus
+	# returns False if couldn't get the package count from dbus
 	#	otherwise returns True
+	# no package count on dbus is an error that would prevent continuing
+	# this should never happen since the DbusIf is instantiated before this call
+	#	which creates /Count if it does not exist
 
 	@classmethod
 	def AddPackagesFromDbus (cls):
 		global DbusIf
 		packageCount = DbusIf.GetPackageCount()
 		if packageCount == None:
-			logging.critical ("dbus PackageCount is not defined -- can't continue")
+			logging.critical ("dbus PackageManager Settings not set up -- can't continue")
 			return False
 		i = 0
 		while i < packageCount:
@@ -1201,7 +1319,7 @@ class PackageClass:
 	def AddPackage ( cls, packageName=None, source=None ):
 		if source == 'GUI':
 			reportStatusTo = 'Editor'
-		# 'AUTO' source
+		# AUTO or INIT source
 		else:
 			reportStatusTo = None
 
@@ -1300,9 +1418,17 @@ class PackageClass:
 				fromIndex += 1
 
 			# here, toIndex points to the last package in the old list
+			toPackage = packages[toIndex]
 
-			# remove the Settings for the package being removed
-			packages[toIndex].RemoveDbusSettings ()
+			# can't actually remove service paths cleanly
+			#	so just set contents to null/False
+			# 	they will disappear after PackageManager is started the next time
+			toPackage.SetGitHubVersion ("?")
+			toPackage.SetInstalledVersion ("?")
+			toPackage.SetPackageVersion ("?")
+
+			# remove the Settings and service paths for the package being removed
+			DbusIf.RemoveDbusSettings ( [toPackage.packageNamePath, toPackage.gitHubUserPath, toPackage.gitHubBranchPath] )
 
 			# remove entry from package list
 			packages.pop (toIndex)
@@ -2482,7 +2608,7 @@ def main():
 	# TODO: change to INFO for debug
 	logging.basicConfig( format='%(levelname)s:%(message)s', level=logging.WARNING )
 
-	logging.warning (">>>> PackageMonitor starting")
+	logging.warning (">>>> PackageManager starting")
 
 	from dbus.mainloop.glib import DBusGMainLoop
 
@@ -2530,38 +2656,39 @@ def main():
 	# initialze dbus Settings and com.victronenergy.packageManager
 	global DbusIf
 	DbusIf = DbusIfClass ()
-
-	okToProceed = PackageClass.AddPackagesFromDbus ()
 	
-	if okToProceed:
-		global DownloadGitHub
-		DownloadGitHub = DownloadGitHubPackagesClass ()
-		
-		global InstallPackages
-		InstallPackages = InstallPackagesClass ()
+	PackageClass.AddPackagesFromDbus ()
 
-		global AddRemove
-		AddRemove = AddRemoveClass ()
+	DbusIf.TransferOldDbusPackageInfo ()
+	
+	global DownloadGitHub
+	DownloadGitHub = DownloadGitHubPackagesClass ()
+	
+	global InstallPackages
+	InstallPackages = InstallPackagesClass ()
 
-		global MediaScan
-		MediaScan = MediaScanClass ()
+	global AddRemove
+	AddRemove = AddRemoveClass ()
 
-		# initialze package list
-		#	and refresh versions before starting threads
-		#	and the background loop
-		PackageClass.AddDefaultPackages ()
-		PackageClass.AddStoredPackages ()
-		PackageClass.UpdateAllFileVersions ()
+	global MediaScan
+	MediaScan = MediaScanClass ()
 
-		DownloadGitHub.start()
-		InstallPackages.start()
-		AddRemove.start()
-		MediaScan.start ()
+	# initialze package list
+	#	and refresh versions before starting threads
+	#	and the background loop
+	PackageClass.AddDefaultPackages ()
+	PackageClass.AddStoredPackages ()
+	PackageClass.UpdateAllFileVersions ()
 
-		# set up main loop - every 5 seconds
-		GLib.timeout_add(5000, mainLoop)
-		mainloop = GLib.MainLoop()
-		mainloop.run()
+	DownloadGitHub.start()
+	InstallPackages.start()
+	AddRemove.start()
+	MediaScan.start ()
+
+	# set up main loop - every 5 seconds
+	GLib.timeout_add(5000, mainLoop)
+	mainloop = GLib.MainLoop()
+	mainloop.run()
 
 
 
@@ -2600,7 +2727,7 @@ def main():
 		except:
 			logging.critical ("svc to shutdown PackageManager failed")
 
-	logging.critical (">>>> PackageMonitor exiting")
+	logging.critical (">>>> PackageManager exiting")
 
 	# program exits here
 

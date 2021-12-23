@@ -6,8 +6,8 @@ import com.victron.velib 1.0
 
 MbPage {
 	id: root
-	title: platformItem.valid ? qsTr("Package Editor") : qsTr ("Package Manager not running")
-    property string settingsPrefix: "com.victronenergy.settings/Settings/PackageMonitor"
+	title: platformItem.valid ? qsTr("Package editor") : qsTr ("Package manager not running")
+    property string settingsPrefix: "com.victronenergy.settings/Settings/PackageManager"
     property string servicePrefix: "com.victronenergy.packageManager"
     property int packageIndex: 0
     property int defaultIndex:0
@@ -141,7 +141,7 @@ MbPage {
         if (actionPending)
         {
 			// provide local confirmation of action - takes PackageManager too long
-			editStatus.setValue ( requestedAction + "ing " + packageName)
+			editStatus.setValue ( requestedAction == 'remove' ? "removing " : requestedAction + "ing " + packageName)
             editActionItem.setValue (requestedAction + ':' + packageName)
 			requestedAction = ''
         }
@@ -173,6 +173,8 @@ MbPage {
     function signalReboot ()
     {
 		if (editAction == 'RebootNeeded')
+			// provide local confirmation of action - takes PackageManager too long
+			editStatus.setValue ( "rebootng")
 			editActionItem.setValue ( 'reboot' )
 		
 		requestedAction = ''
@@ -183,7 +185,7 @@ MbPage {
         MbEditBox
         {
             id: packageNameBox
-            description: qsTr ("Package Name")
+            description: qsTr ("Package name")
             maximumLength: 30
             item.bind: getSettingsBind ("PackageName")
             overwriteMode: false
@@ -261,7 +263,7 @@ MbPage {
         MbEditBox
         {
             id: gitHubUser
-            description: qsTr ("GitHub User")
+            description: qsTr ("GitHub user")
             maximumLength: 20
             item.bind: getSettingsBind ("GitHubUser")
             overwriteMode: false
@@ -271,7 +273,7 @@ MbPage {
         MbEditBox
         {
             id: gitHubBranch
-            description: qsTr ("GitHub Branch or Tag")
+            description: qsTr ("GitHub branch or tag")
             maximumLength: 20
             item.bind: getSettingsBind ("GitHubBranch")
             overwriteMode: false
@@ -286,7 +288,7 @@ MbPage {
             width: 140
             anchors { right: removeButton.left }
             description: ""
-            value: qsTr("New Package")
+            value: qsTr("New package")
             onClicked: add ()
             writeAccessLevel: User.AccessInstaller
             show: navigate
@@ -297,7 +299,7 @@ MbPage {
             width: 170
             anchors { right: parent.right; bottom: addButton.bottom }
             description: ""
-            value: qsTr("Remove Package")
+            value: qsTr("Remove package")
             onClicked: remove ()
             writeAccessLevel: User.AccessInstaller
             show: navigate && ! installedValid
@@ -384,7 +386,7 @@ MbPage {
             id: previousButton
             width: addPackage ? 230 : 100
             anchors { left: parent.left ; top:addButton.bottom }
-            description: addPackage ? qsTr ("Import Default") : ""
+            description: addPackage ? qsTr ("Import default") : ""
             value: (addPackage  &&  packageIndex == 0) ? qsTr ("First") : qsTr("Previous")
             onClicked: previousIndex ()
             show:

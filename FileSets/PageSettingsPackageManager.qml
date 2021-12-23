@@ -6,8 +6,8 @@ import com.victron.velib 1.0
 
 MbPage {
 	id: root
-	title: qsTr("Package Manager")
-    property string settingsPrefix: "com.victronenergy.settings/Settings/PackageMonitor"
+	title: qsTr("Package manager")
+    property string settingsPrefix: "com.victronenergy.settings/Settings/PackageManager"
     property string servicePrefix: "com.victronenergy.packageManager"
     VBusItem { id: downloadStatus; bind: Utils.path(servicePrefix, "/GitHubUpdateStatus") }
     VBusItem { id: installStatus; bind: Utils.path(servicePrefix, "/InstallStatus") }
@@ -24,7 +24,7 @@ MbPage {
             text:
             {
 				if (! showControls)
-					return"Package Manager not running"
+					return"Package manager not running"
 				else if (installStatus.valid && installStatus.value != "")
 					return installStatus.value
 				else if (mediaStatus.valid && mediaStatus.value != "")
@@ -60,13 +60,13 @@ MbPage {
         }
 		MbSubMenu
         {
-            description: qsTr("Package Editor")
+            description: qsTr("Package editor")
             subpage: Component { PageSettingsPackageEdit {} }
             show: showControls
         }
         MbSubMenu
         {
-            description: qsTr("Package Version List")
+            description: qsTr("Package version list")
             subpage: Component { PageSettingsPackageVersions {} }
             show: showControls
         }

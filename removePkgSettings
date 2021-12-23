@@ -61,6 +61,21 @@ removeDbusSettings	/Settings/PackageMonitor/10/PackageName \
 					/Settings/PackageMonitor/14/PackageName \
 					/Settings/PackageMonitor/14/GitHubUser \
 					/Settings/PackageMonitor/14/GitHubBranch > /dev/null
+removeDbusSettings	/Settings/PackageMonitor/15/PackageName \
+					/Settings/PackageMonitor/15/GitHubUser \
+					/Settings/PackageMonitor/15/GitHubBranch \
+					/Settings/PackageMonitor/16/PackageName \
+					/Settings/PackageMonitor/16/GitHubUser \
+					/Settings/PackageMonitor/16/GitHubBranch \
+					/Settings/PackageMonitor/17/PackageName \
+					/Settings/PackageMonitor/17/GitHubUser \
+					/Settings/PackageMonitor/17/GitHubBranch \
+					/Settings/PackageMonitor/18/PackageName \
+					/Settings/PackageMonitor/18/GitHubUser \
+					/Settings/PackageMonitor/18/GitHubBranch \
+					/Settings/PackageMonitor/19/PackageName \
+					/Settings/PackageMonitor/19/GitHubUser \
+					/Settings/PackageMonitor/19/GitHubBranch > /dev/null
 
 removeDbusSettings	/Settings/PackageVersion/Count \
 					/Settings/PackageVersion/New/GitHubUser \
@@ -79,6 +94,7 @@ removeDbusSettings	/Settings/PackageVersion/Count \
 					/Settings/PackageVersion/0/GitHubVersion \
 					/Settings/PackageVersion/0/InstalledVersion \
 					/Settings/PackageVersion/0/PackageVersion  > /dev/null
+
 removeDbusSettings	/Settings/PackageVersion/1/PackageName \
 					/Settings/PackageVersion/1/GitHubUser \
 					/Settings/PackageVersion/1/GitHubBranch \
@@ -98,3 +114,7 @@ removeDbusSettings	/Settings/PackageVersion/1/PackageName \
 					/Settings/PackageVersion/3/GitHubVersion \
 					/Settings/PackageVersion/3/InstalledVersion \
 					/Settings/PackageVersion/3/PackageVersion  > /dev/null
+
+removeDbusSettings	/Settings/PackageMonitor/Edit/GitHubUserEdit/GitHubUser \
+					/Settings/PackageVersion/4/PackageName \
+					/Settings/PackageVersion/4/PackageVersion > /dev/null

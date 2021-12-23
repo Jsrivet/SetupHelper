@@ -6,11 +6,11 @@ import com.victron.velib 1.0
 
 MbPage {
 	id: root
-	title: defaultCount.valid ? qsTr("Package Version List") : qsTr ("Package Manager not running")
+	title: defaultCount.valid ? qsTr("Package version list") : qsTr ("Package manager not running")
     property string servicePrefix: "com.victronenergy.packageManager"
-    property string settingsPrefix: "com.victronenergy.settings/Settings/PackageMonitor"
+    property string settingsPrefix: "com.victronenergy.settings/Settings/PackageManager"
     property VBusItem count: VBusItem { bind: Utils.path(settingsPrefix, "/Count") }
-	// use DefaultCount as an indication that PackageMonitor is running
+	// use DefaultCount as an indication that PackageManager is running
     property VBusItem defaultCount: VBusItem { bind: Utils.path(servicePrefix, "/DefaultCount") }
 
     model: defaultCount.valid ? count.valid ? count.value : 0 : 0

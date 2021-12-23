@@ -13,6 +13,7 @@ GuiMods             kwindrem    latest
 GeneratorConnector  kwindrem    latest
 ShutdownMonitor     kwindrem    latest
 TankRepeater        kwindrem    latest
-VeCanSetup	    kwindrem    latest
+VeCanSetup	    	kwindrem    latest
 RpiDisplaySetup     kwindrem    latest
 RpiGpioSetup        kwindrem    latest
+smartbms-venus		123electric	latest

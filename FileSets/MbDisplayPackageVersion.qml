@@ -13,7 +13,7 @@ MbItem {
     property VBusItem rebootNeededItem: VBusItem { bind: getServiceBind ( "RebootNeeded") }
     property bool rebootNeeded: rebootNeededItem.valid && rebootNeededItem.value == 1
 
-    VBusItem { id: platformItem; bind: Utils.path("com.victronenergy.packageMonitor", "/Platform" ) }
+    VBusItem { id: platformItem; bind: Utils.path("com.victronenergy.packageManager", "/Platform" ) }
     VBusItem { id: incompatibleItem; bind: getServiceBind ( "Incompatible" ) }
     property string incompatibleReason: incompatibleItem.valid ? incompatibleItem.value : ""
     property bool compatible: incompatibleReason == ""

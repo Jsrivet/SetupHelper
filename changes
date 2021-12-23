@@ -1,3 +1,12 @@
+v4.0~15:
+	fixed: auto download not working
+	moved dbus settings for PackageManager to /Settings/PackageManager
+		from /Settings/PackageMonitor
+	remove dbusSettings when package is removed
+		previously these were left in place
+	changed menu items and titles to conform to Victron standards:
+		only firt word capitalized
+
 v4.0~14:
 	fixed: selecting "Now" in GUI when reboot needed does nothing
 	fixed: blind install did not work

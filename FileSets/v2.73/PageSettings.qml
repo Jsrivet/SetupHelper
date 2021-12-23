@@ -175,7 +175,7 @@ MbPage {
 //////// added for package control and version display
         MbSubMenu
         {
-            description: qsTr("Package Manager")
+            description: qsTr("Package manager")
             subpage: Component { PageSettingsPackageManager {} }
         }
 
