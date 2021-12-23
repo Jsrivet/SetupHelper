@@ -1,3 +1,6 @@
+v4.0~16:
+	fixed: packages auto auto-adding following manual removal
+
 v4.0~15:
 	fixed: auto download not working
 	moved dbus settings for PackageManager to /Settings/PackageManager

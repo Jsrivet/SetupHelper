@@ -1348,10 +1348,11 @@ class PackageClass:
 
 			if source == 'GUI':
 				DbusIf.UpdateGuiState ( '' )
-			# delete the removed flag if the package directory exists
-			path = "/data/" + packageName + "/REMOVED"
-			if os.path.exists (path):
-				os.remove (path)
+				# package added from the GUI (aka, manually)
+				#	delete the removed flag if the package directory exists
+				path = "/data/" + packageName + "/REMOVED"
+				if os.path.exists (path):
+					os.remove (path)
 		else:
 			if source == 'GUI':
 				DbusIf.UpdateStatus ( message=packageName + " already exists - choose another name", where=reportStatusTo, logLevel=WARNING )
@@ -1437,11 +1438,10 @@ class PackageClass:
 			DbusIf.UpdatePackageCount ()		
 
 		DbusIf.UNLOCK ()
-		# flag this package was manually removed via setting the REMOVED flag file
+		# flag this package was manually removed by setting the REMOVED flag file
 		#	in the package directory
 		if matchFound:
 			if os.path.isdir ("/data/" + packageName):
-				path = "/data/" + packageName + "/REMOVED"
 				# equivalent to unix touch command
 				open ("/data/" + packageName + "/REMOVED", 'a').close()
 
