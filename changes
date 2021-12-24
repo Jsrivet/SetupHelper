@@ -1,3 +1,10 @@
+v4.0~17:
+	fixed: package editor status did not always show package name
+	fixed?: occationally, Package Editor appears to get stuck when a PackageManager
+			action completes.
+		A missed property update from the dbus paramter may be yhe cause
+		Set a timer to refresh properties in the GUI
+
 v4.0~16:
 	fixed: packages auto auto-adding following manual removal
 

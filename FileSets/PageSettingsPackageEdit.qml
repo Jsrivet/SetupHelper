@@ -53,6 +53,28 @@ MbPage {
 	property string defaultGitHubUser: defaultGitHubUserItem.valid ? defaultGitHubUserItem.value : "??"
 	property string defaultGitHubBranch: defaultGitHubBranchItem.valid ? defaultGitHubBranchItem.value : "??"
 
+	// Band-aid: this timer is used to clean up after an edit action that for whatever reason
+	// does not update the properties
+	// the ASSUMPTON is the action completed WITHOUT ERRORS
+	// the delay is 60 seconds from triggering the action here
+	
+    Timer
+    {
+        id: cleanupTimer
+        interval: 60000
+        repeat: false
+        running: false
+        onTriggered:
+        {
+			if (editActionItem.valid)
+				editAction = editActionItem.value
+			else
+				editAction = ""
+			if (editStatus.valid && editAction == "")
+				editStatus.setValue ( "" )
+		}
+	}
+
 	Component.onCompleted:
 	{
 		defaultIndex = 0
@@ -141,9 +163,10 @@ MbPage {
         if (actionPending)
         {
 			// provide local confirmation of action - takes PackageManager too long
-			editStatus.setValue ( requestedAction == 'remove' ? "removing " : requestedAction + "ing " + packageName)
+			editStatus.setValue ( (requestedAction == 'remove' ? "removing " : requestedAction + "ing ") + packageName)
             editActionItem.setValue (requestedAction + ':' + packageName)
 			requestedAction = ''
+			cleanupTimer.running = true
         }
         if (requestedAction == 'remove')
         {

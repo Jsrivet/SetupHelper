@@ -234,10 +234,10 @@ ERROR_NO_SETUP_FILE = 		999
 #		PushAction ()
 #	DbusIfClass
 #		DbusIf
-#			UpdateGuiState ()
+#			SetGuiEditAction ()
 #			UpdateStatus ()
-#			LocateDefaultPackage ()
-#			handleGuiEditAction ()
+#			LocateDefaultPackage ()handleGuiEditAction
+#			 ()
 #			UpdatePackageCount ()
 #			various Gets and Sets for dbus parameters
 #			LOCK ()
@@ -566,7 +566,7 @@ class AddRemoveClass (threading.Thread):
 #		DbusIf
 #
 #	Methods:
-#		UpdateGuiState
+#		SetGuiEditAction
 #		UpdateStatus
 #		LocateDefaultPackage
 #		handleGuiEditAction
@@ -733,19 +733,6 @@ class DbusIfClass:
 		cls.RemoveDbusSettings ( otherSettings )
 
 	
-	#	UpdateGuiState
-	#
-	# updates the GUI package editor state when a requested opeation completes
-	# The GUI behaves differently for success and failure
-	# source allows this method to only update the GUI state
-	#	even though it may be the result of
-
-	def UpdateGuiState (self, nextState):
-
-		if nextState != None:
-			self.SetGuiEditAction ( nextState )
-
-
 	#	UpdateStatus
 	#
 	# updates the status when the operation completes
@@ -822,6 +809,13 @@ class DbusIfClass:
 		self.DbusService['/MediaUpdateStatus'] = value
 
 
+	#	SetGuiEditAction
+	# is part of the PackageManager to GUI communication
+	# the GUI set's an action triggering some processing here
+	# 	via the dbus change handler
+	# PM updates this dbus value when processing completes 
+	#	signaling either success or failure
+	
 	def SetGuiEditAction (self, value):
 		self.DbusService['/GuiEditAction'] = value
 	def GetGuiEditAction (self):
@@ -1327,7 +1321,7 @@ class PackageClass:
 			DbusIf.UpdateStatus ( message="no package name for AddPackage - nothing done",
 							where=reportStatusTo, logLevel=ERROR )
 			if source == 'GUI':
-				DbusIf.UpdateGuiState ( 'ERROR' )
+				DbusIf.SetGuiEditAction ( 'ERROR' )
 			return False
 
 
@@ -1347,7 +1341,7 @@ class PackageClass:
 			cls.updateGitHubInfo (packageName=packageName, source=source)
 
 			if source == 'GUI':
-				DbusIf.UpdateGuiState ( '' )
+				DbusIf.SetGuiEditAction ( '' )
 				# package added from the GUI (aka, manually)
 				#	delete the removed flag if the package directory exists
 				path = "/data/" + packageName + "/REMOVED"
@@ -1356,7 +1350,7 @@ class PackageClass:
 		else:
 			if source == 'GUI':
 				DbusIf.UpdateStatus ( message=packageName + " already exists - choose another name", where=reportStatusTo, logLevel=WARNING )
-				DbusIf.UpdateGuiState ( 'ERROR' )
+				DbusIf.SetGuiEditAction ( 'ERROR' )
 			else:
 				DbusIf.UpdateStatus ( message=packageName + " already exists", where=reportStatusTo, logLevel=WARNING )
 		
@@ -1446,10 +1440,10 @@ class PackageClass:
 				open ("/data/" + packageName + "/REMOVED", 'a').close()
 
 			DbusIf.UpdateStatus ( message="", where='Editor' )
-			DbusIf.UpdateGuiState ( '' )
+			DbusIf.SetGuiEditAction ( '' )
 		else:
 			DbusIf.UpdateStatus ( message=packageName + " not removed - name not found", where='Editor', logLevel=ERROR )
-			DbusIf.UpdateGuiState ( 'ERROR' )
+			DbusIf.SetGuiEditAction ( 'ERROR' )
 
 
 	#	UpdateFileVersions
@@ -1760,7 +1754,7 @@ class DownloadGitHubPackagesClass (threading.Thread):
 			DbusIf.UpdateStatus ( message="could not get archive on GitHub " + packageName,
 										where=where, logLevel=ERROR )
 			if source == 'GUI':
-				DbusIf.UpdateGuiState ( 'ERROR' )
+				DbusIf.SetGuiEditAction ( 'ERROR' )
 			return False
 		else:
 			proc.wait()
@@ -1775,7 +1769,7 @@ class DownloadGitHubPackagesClass (threading.Thread):
 			DbusIf.UpdateStatus ( message="could not access" + packageName + ' ' + gitHubUser + ' '\
 										+ gitHubBranch + " on GitHub", where=where, logLevel=WARNING )
 			if source == 'GUI':
-				DbusIf.UpdateGuiState ( 'ERROR' )
+				DbusIf.SetGuiEditAction ( 'ERROR' )
 			self.ClearDownloadPending (packageName)
 			shutil.rmtree (tempDirectory)
 			return False
@@ -1786,7 +1780,7 @@ class DownloadGitHubPackagesClass (threading.Thread):
 			DbusIf.UpdateStatus ( message="could not unpack " + packageName + ' ' + gitHubUser + ' ' + gitHubBranch,
 										where=where, logLevel=ERROR )
 			if source == 'GUI':
-				DbusIf.UpdateGuiState ( 'ERROR' )
+				DbusIf.SetGuiEditAction ( 'ERROR' )
 			self.ClearDownloadPending (packageName)
 			shutil.rmtree (tempDirectory)
 			return False
@@ -1804,7 +1798,7 @@ class DownloadGitHubPackagesClass (threading.Thread):
 			DbusIf.UpdateStatus ( message="could not unpack " + packageName + ' ' + gitHubUser + ' ' + gitHubBranch,
 										where=where, logLevel=ERROR )
 			if source == 'GUI':
-				DbusIf.UpdateGuiState ( 'ERROR' )
+				DbusIf.SetGuiEditAction ( 'ERROR' )
 			self.ClearDownloadPending (packageName)
 			shutil.rmtree (tempDirectory)
 			return False
@@ -1834,7 +1828,7 @@ class DownloadGitHubPackagesClass (threading.Thread):
 		self.ClearDownloadPending (packageName)
 		DbusIf.UpdateStatus ( message="", where=where )
 		if source == 'GUI':
-			DbusIf.UpdateGuiState ( '' )
+			DbusIf.SetGuiEditAction ( '' )
 		shutil.rmtree (tempDirectory)
 		return True
 	# end GitHubDownload
@@ -2151,7 +2145,7 @@ class InstallPackagesClass (threading.Thread):
 				DbusIf.UpdateStatus ( message="setup file for " + packageName + " not executable",
 												where=sendStatusTo, logLevel=ERROR )
 				if source == 'GUI':
-					DbusIf.UpdateGuiState ( 'ERROR' )
+					DbusIf.SetGuiEditAction ( 'ERROR' )
 				PackageClass.UpdateInstallStateByPackage (package = package, state=ERROR_NO_SETUP_FILE)
 				DbusIf.UNLOCK ()
 				return
@@ -2159,7 +2153,7 @@ class InstallPackagesClass (threading.Thread):
 			DbusIf.UpdateStatus ( message="setup file for " + packageName + " doesn't exist",
 											where=sendStatusTo, logLevel=ERROR )
 			if source == 'GUI':
-				DbusIf.UpdateGuiState ( 'ERROR' )
+				DbusIf.SetGuiEditAction ( 'ERROR' )
 			PackageClass.UpdateInstallStateByPackage (package = package, state=ERROR_NO_SETUP_FILE)
 			DbusIf.UNLOCK ()
 			return
@@ -2181,7 +2175,7 @@ class InstallPackagesClass (threading.Thread):
 			DbusIf.UpdateStatus ( message="could not run setup file for " + packageName,
 										where=sendStatusTo, logLevel=ERROR )
 			if source == 'GUI':
-				DbusIf.UpdateGuiState ( 'ERROR' )
+				DbusIf.SetGuiEditAction ( 'ERROR' )
 			return
 		proc.wait()
 		stdout, stderr = proc.communicate ()
@@ -2203,7 +2197,7 @@ class InstallPackagesClass (threading.Thread):
 			package.SetIncompatible ('')	# this marks the package as compatible
 			DbusIf.UpdateStatus ( message="", where=sendStatusTo )
 			if source == 'GUI':
-				DbusIf.UpdateGuiState ( '' )
+				DbusIf.SetGuiEditAction ( '' )
 		elif returnCode == EXIT_REBOOT:
 			# set package RebootNeeded so GUI can show the need - does NOT trigger a reboot
 			package.SetRebootNeeded (True)
@@ -2211,7 +2205,7 @@ class InstallPackagesClass (threading.Thread):
 			DbusIf.UpdateStatus ( message=packageName + " " + direction + " requires REBOOT",
 											where=sendStatusTo, logLevel=WARNING )
 			if source == 'GUI':
-				DbusIf.UpdateGuiState ( 'RebootNeeded' )
+				DbusIf.SetGuiEditAction ( 'RebootNeeded' )
 			# auto install triggers a reboot by setting the global flag - reboot handled in main_loop
 			else:
 				global SystemReboot
@@ -2222,38 +2216,38 @@ class InstallPackagesClass (threading.Thread):
 			DbusIf.UpdateStatus ( message=packageName + " setup must be run from command line",
 											where=sendStatusTo, logLevel=WARNING )
 			if source == 'GUI':
-				DbusIf.UpdateGuiState ( 'ERROR' )
+				DbusIf.SetGuiEditAction ( 'ERROR' )
 		elif returnCode == EXIT_INCOMPATIBLE_VERSION:
 			global VenusVersion
 			package.SetIncompatible ('VERSION')
 			DbusIf.UpdateStatus ( message=packageName + " not compatible with Venus " + VenusVersion,
 											where=sendStatusTo, logLevel=WARNING )
 			if source == 'GUI':
-				DbusIf.UpdateGuiState ( 'ERROR' )
+				DbusIf.SetGuiEditAction ( 'ERROR' )
 		elif returnCode == EXIT_INCOMPATIBLE_PLATFOM:
 			global Platform
 			package.SetIncompatible ('PLATFORM')
 			DbusIf.UpdateStatus ( message=packageName + " " + direction + " not compatible with " + Platform,
 											where=sendStatusTo, logLevel=WARNING )
 			if source == 'GUI':
-				DbusIf.UpdateGuiState ( 'ERROR' )
+				DbusIf.SetGuiEditAction ( 'ERROR' )
 		elif returnCode == EXIT_OPTIONS_NOT_SET:
 			DbusIf.UpdateStatus ( message=packageName + " " + direction + " setup must be run from the command line",
 											where=sendStatusTo, logLevel=WARNING )
 			if source == 'GUI':
-				DbusIf.UpdateGuiState ( 'ERROR' )
+				DbusIf.SetGuiEditAction ( 'ERROR' )
 		elif returnCode == EXIT_FILE_SET_ERROR:
 			DbusIf.UpdateStatus ( message=packageName + " file set incomplete",
 											where=sendStatusTo, logLevel=ERROR )
 			if source == 'GUI':
-				DbusIf.UpdateGuiState ( 'ERROR' )
+				DbusIf.SetGuiEditAction ( 'ERROR' )
 		# unknown error
 		elif returnCode != 0:
 			DbusIf.UpdateStatus ( message=packageName + " " + direction + " unknown error " + str (returnCode),
 											where=sendStatusTo, logLevel=ERROR )
 			logging.error (stderr)
 			if source == 'GUI':
-				DbusIf.UpdateGuiState ( 'ERROR' )
+				DbusIf.SetGuiEditAction ( 'ERROR' )
 
 		DbusIf.UNLOCK ()
 	# end InstallPackage ()
