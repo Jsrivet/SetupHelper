@@ -477,33 +477,16 @@ endScript ()
 		logMessage "unexpected script action $scriptAction - did not install or uninstall"
     fi
 
-    if $restartGui $$ !rebootNeeded ; then
-        logMessage "restarting GUI"
-        svc -t /service/gui
-    fi
-
-    # this script was called from reinstallMods
-    # set exit code based on actual code
-    if $runningAtBoot || $deferReboot; then
-        if $rebootNeeded ; then
-            logMessage "reboot needed"
-            exit $EXIT_REBOOT
-		elif $versionNotCompatible ; then
-            logMessage "version not compatible - exiting"
-            exit $EXIT_INCOMPATIBLE_VERSION
-		elif $platformNotCompatible ; then
-            logMessage "platform not compatible - exiting"
-            exit $EXIT_INCOMPATIBLE_PLATFOM
-        else
-            logMessage "completed"
-            exit $EXIT_SUCCESS
-        fi
-
-    # this script was run manually
-    else
-        # if reboot needed ask user if it should be done now
-        if $rebootNeeded ; then
-			yesNoPrompt "Reboot system now (y) or issue a reboot manually later (n): "
+	# prioritize exit
+	if $versionNotCompatible ; then
+		logMessage "version not compatible - exiting"
+		exit $EXIT_INCOMPATIBLE_VERSION
+	elif $platformNotCompatible ; then
+		logMessage "platform not compatible - exiting"
+		exit $EXIT_INCOMPATIBLE_PLATFOM
+	elif $rebootNeeded ; then
+		if $logToConsole ; then
+			yesNoPrompt "Reboot system now (y) or do it manually later (n): "
 			if $yesResponse ; then
 				echo "rebooting ..."
 				reboot
@@ -511,16 +494,35 @@ endScript ()
 				echo "system must be rebooted to finish installation and activate components"
 				exit $EXIT_REBOOT
 			fi
-        elif $runAgain ; then
-            echo "$shortScriptName NOT completed"
-            echo "  run it again manually to finish"
-            echo "  or reboot the system to finish automatically"
-            exit $EXIT_RUN_AGAIN
 		else
-            logMessage "completed"
-            exit $EXIT_SUCCESS
-        fi
-    fi
+			echo "rebooting ..."
+			exit $EXIT_REBOOT
+		fi
+	elif $restartGui ; then
+		if $logToConsole ; then
+			yesNoPrompt "Restart the GUI now (y) or issue a do it manually later (n): "
+			if $yesResponse ; then
+				echo "restarting GUI ..."
+				svc -t /service/gui
+				exit $EXIT_SUCCESS
+			else
+				echo "GUI must be restarted activate components"
+				exit $EXIT_RESTART_GUI
+			fi
+		else
+			if $deferGuiRestart ; then
+				logMessage "GUI restart needed"
+				exit $EXIT_RESTART_GUI
+			# GUI restart NOT deferred - do it now
+			else
+				svc -t /service/gui
+				exit $EXIT_SUCCESS
+			fi
+		fi
+	else
+		logMessage "completed"
+		exit $EXIT_SUCCESS
+	fi
 }
 
 ######## this code is executed in-line when CommonResources is sourced
@@ -535,30 +537,43 @@ endScript ()
 # we assume a reinstall is always run without benefit of a console (runningAtBoot will be true)
 # so there will be no prompts and all actions will be automatic
 #
-# runningAtBoot would be better named runningWithoutUserPrompts but not changing that now
+# "deferReboot" signals that endScript should not reboot the system, but return EXIT_REBOOT
+#	assuming the caller will evenutally reboot the system
 #
-# "deferReboot" signals that endScript should not prompt for a user reboot, but return EXIT_REBOOT
-# This is used by the manual package install called from SetupHelper setup script
+# "deferGuiRestart" is similar for restarting the GUI
 #
 # "install" causes the package to be installed silently
 # "uninstall" causes the package to be uninstalled silently
 #
 # command line parameters may appear in any order
+#
+#
+# logToConsole is set to true in the LogHandler script
+# It is set to false here if the command line parameters suggest
+#	the setup script is being run without the aid of the command line interface
+#	in which case the user will not be prompted and apprporiate actions are taken automatically
+#	exit code returned by the setup script indicates additional actions that
+#	need to be taken by the caller (if any) or the reason the script could not be completed
 
 # collect command line options
 reinstall=false
 force=false
 deferReboot=false
+deferGuiRestart=false
 while [ $# -gt 0 ]; do
         case $1 in
             $reinstallParam)
                 reinstall=true
+                logToConsole=false
                 ;;
             "force")
                 force=true
                 ;;
             "deferReboot")
                 deferReboot=true
+                ;;
+            "deferGuiRestart")
+                deferGuiRestart=true
                 ;;
             "install")
                 scriptAction='INSTALL'
@@ -589,9 +604,6 @@ if [ ! -f "$installedVersionFile" ] && [  -f "$installedFlag" ]; then
 	fi
 fi
 rm -f "$installedFlag"
-
-# command line options are needed for blind install or reinstall
-# so look for optionsSet
 
 # packages that require options to proceed unattended
 # must include the optionsRequried flag file in their package directory
@@ -626,7 +638,9 @@ else
 	optionsSet=true
 fi
 
+# called from reinstallMods at boot time
 if $reinstall ; then
+    runningAtBoot=true
     if $force ; then
         scriptAction='INSTALL'
     elif [ ! -f "$installedVersionFile" ]; then
@@ -634,10 +648,9 @@ if $reinstall ; then
     else
         exit $EXIT_SUCCESS
     fi
-    runningAtBoot=true
     logToConsole=false
 
-# not a reinstall, continue with MANUAL installation
+# not running from reinstallMods
 else
     runningAtBoot=false
 fi

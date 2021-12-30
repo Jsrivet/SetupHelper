@@ -1,3 +1,11 @@
+v4.0~18:
+	fixed: packages auto add/install when PackageManager is restarted
+		even if REMOVED / DO_NOT_AUTO_INSTALL was set
+	more work on GUI getting "stuck"
+	bogus "unpack tar from GitHub failed" message - package downloads properly
+	major change to thread structure to make operations more responsive
+		and to minimize CPU consumption when idle
+
 v4.0~17:
 	fixed: package editor status did not always show package name
 	fixed?: occationally, Package Editor appears to get stuck when a PackageManager

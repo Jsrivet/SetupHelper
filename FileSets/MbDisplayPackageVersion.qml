@@ -11,7 +11,9 @@ MbItem {
 
     VBusItem { id: packageName; bind: getSettingsBind ("PackageName") }
     property VBusItem rebootNeededItem: VBusItem { bind: getServiceBind ( "RebootNeeded") }
+    property VBusItem guiRestartNeededItem: VBusItem { bind: getServiceBind ( "GuiRestartNeeded") }
     property bool rebootNeeded: rebootNeededItem.valid && rebootNeededItem.value == 1
+    property bool guiRestartNeeded: guiRestartNeededItem.valid && guiRestartNeededItem.value == 1
 
     VBusItem { id: platformItem; bind: Utils.path("com.victronenergy.packageManager", "/Platform" ) }
     VBusItem { id: incompatibleItem; bind: getServiceBind ( "Incompatible" ) }
@@ -25,13 +27,15 @@ MbItem {
 	function statusText ()
 	{
 		if (rebootNeeded)
-			return ("         REBOOT needed")
+			return qsTr ("         REBOOT needed")
+		if (guiRestartNeeded)
+			return qsTr ("         GUI restart needed")
 		else if (incompatibleReason == 'PLATFORM')
-			return ( "not compatible with " + platform )
+			return qsTr ( "  not compatible with " + platform )
 		else if (incompatibleReason == 'VERSION')
-			return ( "not compatible with " + vePlatform.version )
+			return qsTr ( "  not compatible with " + vePlatform.version )
 		else if (incompatibleReason == 'CMDLINE' && installedVersion.item.value == "")
-			return ( "must install from command line" )
+			return qsTr ( "  must install from command line" )
 		else
 			return ""
 	}
@@ -126,7 +130,7 @@ MbItem {
 			}
 			Text
 			{
-				text: "Stored"
+				text: qsTr ("Stored")
                 font.pixelSize: 10
 			}
 			MbTextBlock
@@ -145,7 +149,7 @@ MbItem {
 			}
 			Text
 			{
-				text: "Installed"
+				text: qsTr ("Installed")
                 font.pixelSize: 10
 			}
 			MbTextBlock

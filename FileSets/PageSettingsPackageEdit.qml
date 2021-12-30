@@ -6,98 +6,64 @@ import com.victron.velib 1.0
 
 MbPage {
 	id: root
-	title: platformItem.valid ? qsTr("Package editor") : qsTr ("Package manager not running")
+	title: platform.valid ? qsTr("Package editor") : qsTr ("Package manager not running")
     property string settingsPrefix: "com.victronenergy.settings/Settings/PackageManager"
     property string servicePrefix: "com.victronenergy.packageManager"
     property int packageIndex: 0
     property int defaultIndex:0
-    property VBusItem defaultCountItem: VBusItem { bind: Utils.path(servicePrefix, "/DefaultCount") }
-    property int defaultCount: defaultCountItem.valid ? defaultCountItem.value : 0
-    property VBusItem packageCountItem: VBusItem { bind: Utils.path(settingsPrefix, "/Count") }
-    property int packageCount: packageCountItem.valid ? packageCountItem.value : 0
-    property VBusItem editActionItem: VBusItem { bind: Utils.path(servicePrefix, "/GuiEditAction") }
-    property string editAction: editActionItem.valid ? editActionItem.value : ""
+    property VBusItem defaultCount: VBusItem { bind: Utils.path(servicePrefix, "/DefaultCount") }
+    property VBusItem packageCount: VBusItem { bind: Utils.path(settingsPrefix, "/Count") }
+    property VBusItem editAction: VBusItem { bind: Utils.path(servicePrefix, "/GuiEditAction") }
     property VBusItem editStatus: VBusItem { bind: Utils.path(servicePrefix, "/GuiEditStatus") }
     property string packageName: packageNameBox.item.valid ? packageNameBox.item.value : ""
     property bool isSetupHelper: packageName == "SetupHelper"
 
-    property VBusItem rebootNeededItem: VBusItem { bind: getServiceBind ( "RebootNeeded") }
-    property bool rebootNeeded: rebootNeededItem.valid && rebootNeededItem.value == 1
-    property VBusItem incompatibleItem: VBusItem { bind: getServiceBind ( "Incompatible") }
-    property string incompatibleReason: incompatibleItem.valid ? incompatibleItem.value : ""
-    property bool compatible: incompatibleReason == ""
-    property VBusItem platformItem: VBusItem { bind: Utils.path(servicePrefix, "/Platform") }
-    property string platform: platformItem.valid ? platformItem.value : "??"
+    property VBusItem rebootNeeded: VBusItem { bind: getServiceBind ( "RebootNeeded") }
+    property VBusItem guiRestartNeeded: VBusItem { bind: getServiceBind ( "GuiRestartNeeded") }
+    property VBusItem incompatibleReason: VBusItem { bind: getServiceBind ( "Incompatible") }
+    property VBusItem platform: VBusItem { bind: Utils.path(servicePrefix, "/Platform") }
 
     property bool addPackage: requestedAction == 'add' && showControls    
-    property bool showControls: editActionItem.valid
+    property bool showControls: editAction.valid
     property bool gitHubValid: gitHubVersion.item.valid && gitHubVersion.item.value.substring (0,1) === "v"
     property bool packageValid: packageVersion.item.valid && packageVersion.item.value.substring (0,1) === "v"
     property bool installedValid: installedVersion.item.valid && installedVersion.item.value.substring (0,1) === "v"
     property bool downloadOk: gitHubValid && gitHubVersion.item.value != ""
-    property bool installOk: packageValid && packageVersion.item.value  != "" && compatible
-    property string requestedAction: ""
+    property bool installOk: packageValid && packageVersion.item.value  != "" && incompatibleReason.value == ""
+    property string requestedAction: ''
     property bool actionPending: requestedAction != ''
     property bool navigate: ! actionPending && ! waitForAction && showControls
-    property bool waitForAction: editAction != '' && showControls
-    property bool moreActions: showControls && editAction == 'RebootNeeded'
+    property bool waitForAction: showControls && editAction.value != ''
+    property bool moreActions: showControls && (editAction.value == 'RebootNeeded' || editAction.value == 'GuiRestartNeeded')
 
-    property VBusItem defaultPackageNameItem: VBusItem { bind: Utils.path ( servicePrefix, "/Default/", defaultIndex, "/", "PackageName" ) }
-    property VBusItem defaultGitHubUserItem: VBusItem { bind: Utils.path ( servicePrefix, "/Default/", defaultIndex, "/", "GitHubUser" ) }
-    property VBusItem defaultGitHubBranchItem: VBusItem { bind: Utils.path ( servicePrefix, "/Default/", defaultIndex, "/", "GitHubBranch" ) }
-    property VBusItem editPackageNameItem: VBusItem { bind: Utils.path ( settingsPrefix, "/Edit/", "PackageName" ) }
-    property VBusItem editGitHubUserItem: VBusItem { bind: Utils.path ( settingsPrefix, "/Edit/", "GitHubUser" ) }
-    property VBusItem editGitHubBranchItem: VBusItem { bind: Utils.path ( settingsPrefix, "/Edit/", "GitHubBranch" ) }
+    property VBusItem defaultPackageName: VBusItem { bind: Utils.path ( servicePrefix, "/Default/", defaultIndex, "/", "PackageName" ) }
+    property VBusItem defaultGitHubUser: VBusItem { bind: Utils.path ( servicePrefix, "/Default/", defaultIndex, "/", "GitHubUser" ) }
+    property VBusItem defaultGitHubBranch: VBusItem { bind: Utils.path ( servicePrefix, "/Default/", defaultIndex, "/", "GitHubBranch" ) }
+    property VBusItem editPackageName: VBusItem { bind: Utils.path ( settingsPrefix, "/Edit/", "PackageName" ) }
+    property VBusItem editGitHubUser: VBusItem { bind: Utils.path ( settingsPrefix, "/Edit/", "GitHubUser" ) }
+    property VBusItem editGitHubBranch: VBusItem { bind: Utils.path ( settingsPrefix, "/Edit/", "GitHubBranch" ) }
 
-	property string defaultPackageName: defaultPackageNameItem.valid ? defaultPackageNameItem.value : "??"
-	property string defaultGitHubUser: defaultGitHubUserItem.valid ? defaultGitHubUserItem.value : "??"
-	property string defaultGitHubBranch: defaultGitHubBranchItem.valid ? defaultGitHubBranchItem.value : "??"
-
-	// Band-aid: this timer is used to clean up after an edit action that for whatever reason
-	// does not update the properties
-	// the ASSUMPTON is the action completed WITHOUT ERRORS
-	// the delay is 60 seconds from triggering the action here
-	
-    Timer
-    {
-        id: cleanupTimer
-        interval: 60000
-        repeat: false
-        running: false
-        onTriggered:
-        {
-			if (editActionItem.valid)
-				editAction = editActionItem.value
-			else
-				editAction = ""
-			if (editStatus.valid && editAction == "")
-				editStatus.setValue ( "" )
-		}
-	}
 
 	Component.onCompleted:
 	{
-		defaultIndex = 0
 		resetPackageIndex ()
 		resetDefaultIndex ()
 	}
-	onPackageCountChanged: resetPackageIndex ()
-	onDefaultCountChanged: resetDefaultIndex ()
 	
 	function resetPackageIndex ()
 	{
 		if (packageIndex < 0)
 			packageIndex = 0
-		else if (packageIndex >= packageCount)
-			packageIndex = packageCount - 1
+		else if (packageIndex >= packageCount.value)
+			packageIndex = packageCount.value - 1
 	}
 	
 	function resetDefaultIndex ()
 	{
 		if (defaultIndex < 0)
 			defaultIndex = 0
-		else if (defaultIndex >= defaultCount)
-			defaultIndex = defaultCount - 1
+		else if (defaultIndex >= defaultCount.value)
+			defaultIndex = defaultCount.value - 1
 	}
 	
 	function getSettingsBind(param)
@@ -105,23 +71,29 @@ MbPage {
 		if (addPackage)
 			return Utils.path(settingsPrefix, "/Edit/", param)
 		else
+		{
+			resetPackageIndex ()
 			return Utils.path(settingsPrefix, "/", packageIndex, "/", param)
+		}
 	}
 	function getServiceBind(param)
 	{
 		if (addPackage)
 			return Utils.path(servicePrefix, "/Default/", defaultIndex, "/", param)
 		else
+		{
+			resetPackageIndex ()
 			return Utils.path(servicePrefix, "/Package/", packageIndex, "/", param)
+		}
 	}
     
 	// copy a set of default package values to Edit area when changing indexes
 	function updateEdit ()
 	{
 		bindPrefix = Utils.path(servicePrefix, "/Default/", defaultIndex )
-		editPackageNameItem.setValue ( defaultPackageName )
-		editGitHubUserItem.setValue ( defaultGitHubUser )
-		editGitHubBranchItem.setValue ( defaultGitHubBranch )
+		editPackageName.setValue ( defaultPackageName.valid ? defaultPackageName.value : "??" )
+		editGitHubUser.setValue ( defaultGitHubUser.valid ? defaultGitHubUser.value : "??" )
+		editGitHubBranch.setValue ( defaultGitHubBranch.valid ? defaultGitHubBranch.value : "??" )
 	}
 
     function nextIndex ()
@@ -129,14 +101,14 @@ MbPage {
 		if (addPackage)
 		{
 			defaultIndex += 1
-			if (defaultIndex >= defaultCount)
-				defaultIndex = defaultCount - 1
+			if (defaultIndex >= defaultCount.value)
+				defaultIndex = defaultCount.value - 1
 			updateEdit ()
 		}
 		else
 			packageIndex += 1
-			if (packageIndex >= packageCount)
- 							packageIndex = packageCount - 1
+			if (packageIndex >= packageCount.value)
+ 							packageIndex = packageCount.value - 1
    }
     function previousIndex ()
     {
@@ -155,7 +127,7 @@ MbPage {
     function cancelEdit ()
     {
 		requestedAction = ''
-		editActionItem.setValue ( '' )
+		editAction.setValue ( '' )
 		editStatus.setValue ( '' )
     }
     function confirm ()
@@ -164,13 +136,8 @@ MbPage {
         {
 			// provide local confirmation of action - takes PackageManager too long
 			editStatus.setValue ( (requestedAction == 'remove' ? "removing " : requestedAction + "ing ") + packageName)
-            editActionItem.setValue (requestedAction + ':' + packageName)
+            editAction.setValue (requestedAction + ':' + packageName)
 			requestedAction = ''
-			cleanupTimer.running = true
-        }
-        if (requestedAction == 'remove')
-        {
-			previousIndex ()
         }
     }
     function install ()
@@ -193,13 +160,20 @@ MbPage {
     {
 		requestedAction = 'remove'
     }
-    function signalReboot ()
+    function signalAdditionalAction ()
     {
-		if (editAction == 'RebootNeeded')
+		if (editAction.value == 'RebootNeeded')
+		{
 			// provide local confirmation of action - takes PackageManager too long
 			editStatus.setValue ( "rebootng")
-			editActionItem.setValue ( 'reboot' )
-		
+			editAction.setValue ( 'reboot' )
+		}
+		else if (editAction.value == 'GuiRestartNeeded')
+		{
+			// provide local confirmation of action - takes PackageManager too long
+			editStatus.setValue ( "restarting GUI")
+			editAction.setValue ( 'restartGui' )
+		}
 		requestedAction = ''
 	}
 
@@ -250,29 +224,37 @@ MbPage {
             }
             Text
             {
-                text: rebootNeeded ? qsTr ("REBOOT\nfor:") : qsTr ("installed:")
+                text:
+                {
+					if (rebootNeeded.value == 1)
+						return qsTr ("REBOOT:")
+					else if (guiRestartNeeded.value == 1)
+						return qsTr ("GUI\nRestart:")
+					else
+						return qsTr ("installed:")
+				}
 				horizontalAlignment: Text.AlignRight
 				width: 50
                 font.pixelSize: 10
-				show: showControls && compatible
+				show: showControls && incompatibleReason.value == ""
             }
             MbTextBlock
             {
                 id: installedVersion
                 item { bind: getServiceBind("InstalledVersion") }
                 height: 25; width: 80
-				show: showControls && compatible
+				show: showControls && incompatibleReason.value == ""
             }
             Text
             {
 				id: incompatibleText
 				text:
 				{
-					if (incompatibleReason == 'PLATFORM')
-						return ( qsTr ("not compatible with\n") + platform )
-					else if (incompatibleReason == 'VERSION')
+					if (incompatibleReason.value == 'PLATFORM')
+						return ( qsTr ("not compatible with\n") + platformItem.value )
+					else if (incompatibleReason.value == 'VERSION')
 						return ( qsTr ("not compatible with\n") + vePlatform.version )
-					else if (incompatibleReason == 'CMDLINE')
+					else if (incompatibleReason.value == 'CMDLINE')
 						return qsTr ("must install\nfrom command line" )
 					else
 						return qsTr ("compatible ???" ) // compatible for unknown reason
@@ -280,7 +262,7 @@ MbPage {
 				horizontalAlignment: Text.AlignHCenter
 				width: 50 + 80 + 3
                 font.pixelSize: 10
-				show: showControls && ! compatible
+				show: showControls && ! incompatibleReason.value == ""
 			}
         }
         MbEditBox
@@ -345,7 +327,7 @@ MbPage {
             description: ""
             value: qsTr("OK")
             onClicked: cancelEdit ()
-            show: showControls && editAction == 'ERROR'
+            show: showControls && editAction.value == 'ERROR'
         }
         MbOK
         {
@@ -364,7 +346,7 @@ MbPage {
             anchors { right: laterButton.left; bottom: addButton.bottom }
             description: ""
             value: qsTr("Now")
-            onClicked: signalReboot ()
+            onClicked: signalAdditionalAction ()
             show: moreActions
         }
         MbOK
@@ -410,12 +392,23 @@ MbPage {
             width: addPackage ? 230 : 100
             anchors { left: parent.left ; top:addButton.bottom }
             description: addPackage ? qsTr ("Import default") : ""
-            value: (addPackage  &&  packageIndex == 0) ? qsTr ("First") : qsTr("Previous")
+            value:
+            {
+				if (addPackage)
+				{
+					if (defaultIndex == 0)
+						return qsTr ("First")
+					else
+						return qsTr ("Previous")
+				}
+				else
+					return qsTr("Previous")
+			}
             onClicked: previousIndex ()
             show:
             {
 				if (! showControls)
-					return False
+					return false
 				else if (addPackage)
 					return true
 				else
@@ -433,17 +426,28 @@ MbPage {
             width: 75
             anchors { left: previousButton.right; bottom: previousButton.bottom }
             description: ""
-            value: (addPackage &&  packageIndex == packageCount - 1 )? qsTr ("Last") : qsTr("Next")
+            value:
+            {
+				if (addPackage)
+				{
+					if (defaultIndex == defaultCount.value - 1)
+						return qsTr ("Last")
+					else
+						return qsTr ("Next")
+				}
+				else
+					return qsTr("Next")
+			}
             onClicked: nextIndex ()
             show:
             {
 				if (! showControls)
-					return False
+					return false
 				else if (addPackage)
 					return true
 				else
 				{
-					if (packageIndex < packageCount - 1)
+					if (packageIndex < packageCount.value - 1)
 						return true
 					else
 						return false
