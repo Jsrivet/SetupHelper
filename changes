@@ -1,3 +1,5 @@
+v4.0!19:
+	fixed: missing PackageManager.py from blind installl
 v4.0~18:
 	fixed: packages auto add/install when PackageManager is restarted
 		even if REMOVED / DO_NOT_AUTO_INSTALL was set
