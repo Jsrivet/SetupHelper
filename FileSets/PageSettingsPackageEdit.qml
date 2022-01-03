@@ -23,7 +23,6 @@ MbPage {
     property VBusItem incompatibleReason: VBusItem { bind: getServiceBind ( "Incompatible") }
     property VBusItem platform: VBusItem { bind: Utils.path(servicePrefix, "/Platform") }
 
-    property bool addPackage: requestedAction == 'add' && showControls    
     property bool showControls: editAction.valid
     property bool gitHubValid: gitHubVersion.item.valid && gitHubVersion.item.value.substring (0,1) === "v"
     property bool packageValid: packageVersion.item.valid && packageVersion.item.value.substring (0,1) === "v"
@@ -47,7 +46,6 @@ MbPage {
 	Component.onCompleted:
 	{
 		resetPackageIndex ()
-		resetDefaultIndex ()
 	}
 	
 	function resetPackageIndex ()
@@ -58,71 +56,28 @@ MbPage {
 			packageIndex = packageCount.value - 1
 	}
 	
-	function resetDefaultIndex ()
-	{
-		if (defaultIndex < 0)
-			defaultIndex = 0
-		else if (defaultIndex >= defaultCount.value)
-			defaultIndex = defaultCount.value - 1
-	}
-	
 	function getSettingsBind(param)
 	{
-		if (addPackage)
-			return Utils.path(settingsPrefix, "/Edit/", param)
-		else
-		{
-			resetPackageIndex ()
-			return Utils.path(settingsPrefix, "/", packageIndex, "/", param)
-		}
+		resetPackageIndex ()
+		return Utils.path(settingsPrefix, "/", packageIndex, "/", param)
 	}
 	function getServiceBind(param)
 	{
-		if (addPackage)
-			return Utils.path(servicePrefix, "/Default/", defaultIndex, "/", param)
-		else
-		{
-			resetPackageIndex ()
-			return Utils.path(servicePrefix, "/Package/", packageIndex, "/", param)
-		}
+		resetPackageIndex ()
+		return Utils.path(servicePrefix, "/Package/", packageIndex, "/", param)
 	}
     
-	// copy a set of default package values to Edit area when changing indexes
-	function updateEdit ()
-	{
-		bindPrefix = Utils.path(servicePrefix, "/Default/", defaultIndex )
-		editPackageName.setValue ( defaultPackageName.valid ? defaultPackageName.value : "??" )
-		editGitHubUser.setValue ( defaultGitHubUser.valid ? defaultGitHubUser.value : "??" )
-		editGitHubBranch.setValue ( defaultGitHubBranch.valid ? defaultGitHubBranch.value : "??" )
-	}
-
     function nextIndex ()
     {
-		if (addPackage)
-		{
-			defaultIndex += 1
-			if (defaultIndex >= defaultCount.value)
-				defaultIndex = defaultCount.value - 1
-			updateEdit ()
-		}
-		else
-			packageIndex += 1
-			if (packageIndex >= packageCount.value)
- 							packageIndex = packageCount.value - 1
+		packageIndex += 1
+		if (packageIndex >= packageCount.value)
+						packageIndex = packageCount.value - 1
    }
     function previousIndex ()
     {
-		if (addPackage)
-		{
-			defaultIndex -= 1
-			if (defaultIndex < 0)
-				defaultIndex = 0
-			updateEdit ()
-		}
-		else
-			packageIndex -= 1
-			if (packageIndex < 0)
-				packageIndex = 0
+		packageIndex -= 1
+		if (packageIndex < 0)
+			packageIndex = 0
     }
     function cancelEdit ()
     {
@@ -151,10 +106,6 @@ MbPage {
     function gitHubDownload ()
     {
 		requestedAction = 'download'
-    }
-    function add ()
-    {
-		requestedAction = 'add'
     }
     function remove ()
     {
@@ -187,14 +138,13 @@ MbPage {
             item.bind: getSettingsBind ("PackageName")
             overwriteMode: false
             writeAccessLevel: User.AccessInstaller
-            readonly: ! addPackage
+            readonly: true
             show: showControls
         }
         MbRowSmall
         {
             description: qsTr ("Versions")
             height: 25
-            opacity: addPackage ? .0001 : 1
             Text
             {
                 text: "GitHub:"
@@ -285,35 +235,23 @@ MbPage {
             writeAccessLevel: User.AccessInstaller
 			show: showControls
         }
-
-        // top row of buttons
-        MbOK
-        {
-            id: addButton
-            width: 140
-            anchors { right: removeButton.left }
-            description: ""
-            value: qsTr("New package")
-            onClicked: add ()
-            writeAccessLevel: User.AccessInstaller
-            show: navigate
-        }
         MbOK
         {
             id: removeButton
             width: 170
-            anchors { right: parent.right; bottom: addButton.bottom }
+            anchors { right: parent.right; bottom: removeButton.bottom }
             description: ""
             value: qsTr("Remove package")
             onClicked: remove ()
             writeAccessLevel: User.AccessInstaller
-            show: navigate && ! installedValid
+            opacity:  installedValid ? 0.0001 : 1.0
+            show: navigate
         }
         MbOK
         {
             id: cancelButton
             width: 90
-            anchors { right: parent.right; bottom: addButton.bottom }
+            anchors { right: parent.right; bottom: removeButton.bottom }
             description: ""
             value: qsTr("Cancel")
             onClicked: cancelEdit ()
@@ -323,7 +261,7 @@ MbPage {
         {
             id: dismissErrorButton
             width: 90
-            anchors { right: parent.right; bottom: addButton.bottom }
+            anchors { right: parent.right; bottom: removeButton.bottom }
             description: ""
             value: qsTr("OK")
             onClicked: cancelEdit ()
@@ -333,7 +271,7 @@ MbPage {
         {
             id: laterButton
             width: 90
-            anchors { right: parent.right; bottom: addButton.bottom }
+            anchors { right: parent.right; bottom: removeButton.bottom }
             description: ""
             value: qsTr("Later")
             onClicked: cancelEdit ()
@@ -343,7 +281,7 @@ MbPage {
         {
             id: nowButton
             width: 90
-            anchors { right: laterButton.left; bottom: addButton.bottom }
+            anchors { right: laterButton.left; bottom: removeButton.bottom }
             description: ""
             value: qsTr("Now")
             onClicked: signalAdditionalAction ()
@@ -353,7 +291,7 @@ MbPage {
         {
             id: confirmButton
             width: 375
-            anchors { left: parent.left; bottom: addButton.bottom }
+            anchors { left: parent.left; bottom: removeButton.bottom }
             description: ""
             value: qsTr ("Proceed")
             onClicked: confirm ()
@@ -365,9 +303,9 @@ MbPage {
             id: statusMessage
             width: 250
             wrapMode: Text.WordWrap
-            anchors { left: parent.left; leftMargin: 10; bottom: addButton.bottom; bottomMargin: 5 }
+            anchors { left: parent.left; leftMargin: 10; bottom: removeButton.bottom; bottomMargin: 5 }
             font.pixelSize: 12
-            color: actionPending && isSetupHelper && ! addPackage ? "red" : "black"
+            color: actionPending && isSetupHelper ? "red" : "black"
             text:
             {
 				if (actionPending)
@@ -389,35 +327,19 @@ MbPage {
         MbOK
         {
             id: previousButton
-            width: addPackage ? 230 : 100
-            anchors { left: parent.left ; top:addButton.bottom }
-            description: addPackage ? qsTr ("Import default") : ""
-            value:
-            {
-				if (addPackage)
-				{
-					if (defaultIndex == 0)
-						return qsTr ("First")
-					else
-						return qsTr ("Previous")
-				}
-				else
-					return qsTr("Previous")
-			}
+            width: 100
+            anchors { left: parent.left ; top:removeButton.bottom }
+            description: ""
+            value: qsTr("Previous")
             onClicked: previousIndex ()
             show:
             {
 				if (! showControls)
 					return false
-				else if (addPackage)
+				else if (packageIndex > 0)
 					return true
 				else
-				{
-					if (packageIndex > 0)
-						return true
-					else
-						return false
-				}
+					return false
 			}
         }
         MbOK
@@ -426,32 +348,16 @@ MbPage {
             width: 75
             anchors { left: previousButton.right; bottom: previousButton.bottom }
             description: ""
-            value:
-            {
-				if (addPackage)
-				{
-					if (defaultIndex == defaultCount.value - 1)
-						return qsTr ("Last")
-					else
-						return qsTr ("Next")
-				}
-				else
-					return qsTr("Next")
-			}
+            value: qsTr("Next")
             onClicked: nextIndex ()
             show:
             {
 				if (! showControls)
 					return false
-				else if (addPackage)
+				else if (packageIndex < packageCount.value - 1)
 					return true
 				else
-				{
-					if (packageIndex < packageCount.value - 1)
-						return true
-					else
-						return false
-				}
+					return false
 			}
         }
         MbOK
@@ -462,7 +368,7 @@ MbPage {
             description: ""
             value: qsTr ("Download")
 			onClicked: gitHubDownload ()
-           show: navigate && downloadOk
+			show: navigate && downloadOk
             writeAccessLevel: User.AccessInstaller
         }
         MbOK

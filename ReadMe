@@ -1,7 +1,15 @@
 New: SetupHelper includes a GUI based package mananager
 
-The SetupHelper package provides:\n    a mechanism to automatically reinstall packages following a Venus OS update\n    an automatic update mechanism to keep packages up to date\n        from GitHub archives or USB stick\n	control of the automatic download and install from the GUI\n	add and remove packages from the system\n	manual download, install, uninstall from the GUI\n
-    an "blind" install of SetupHelper from SD/USB media\n
+The SetupHelper package provides:
+    a mechanism to automatically reinstall packages following a Venus OS update
+    an automatic update mechanism to keep packages up to date
+        from GitHub archives or USB stick
+	control of the automatic download and install from the GUI
+	add and remove packages from the system
+	manual download, install, uninstall from the GUI
+
+    a "blind" install of SetupHelper from SD/USB media
+
 
 SetupHelper is also required for my other packages
 	and must be installed BEFORE running the other package setup scripts
@@ -82,53 +90,66 @@ The Package Manager includes a set of menus on the GX device menu system
 				Once checks GitHub for a package at the fast rate, but only once, then dowloads are turned off
 				Disable disables GitHub downloads
 
-			Auto install packages:
-				Controls whether new versions of a package are automatically installed.
-				Some users may wish to have the system automatically download new updates,
-				but install them manually.
-				In this case, automatic GitHub downloads may be turned on and Auto install packages turned off
-				
-				Auto install packages also influences whether packages transferred from SD/USB media 
-					are automatically installed or just transferred to local storage
+		Auto install packages:
+			Controls whether new versions of a package are automatically installed.
+			Some users may wish to have the system automatically download new updates,
+			but install them manually.
+			In this case, automatic GitHub downloads may be turned on and Auto install packages turned off
+			
+			Auto install packages also influences whether packages transferred from SD/USB media 
+				are automatically installed or just transferred to local storage
 
-	Package Version List:
-		displays all packages known to Package Manager.
-		
-		Version information is displayed for each package:
-			Git Hub shows the version found on GitHub
-			Stored shows the verison stored on the GX device
-			Installed shows the version actually installed and running
+		Active packages:
+			displays all active packages
+			
+			Version information is displayed for each package:
+				Git Hub shows the version found on GitHub
+				Stored shows the verison stored on the GX device
+				Installed shows the version actually installed and running
 
-	Package Editor:
-		This menu facilitates:
-			manual install, uninstall, package add and package remove
-			changing GitHub access information for each package
+			Tappingn on one of the entries leads to the Package editor menu
 
-		Normally, you would want to download the latest released version
-			but you may also wish to try out a beta version or revert to a previous one.
-			Once the GitHub branch is changed, PackageManager will update the GitHub version
-				and, if enabled, download this alternate version.
+		Inactive packages:
+			displays all INACTIVE packages
+				I.e., default packages not yet activated or manually removed
+			The first entry is always "new" and allows the operator to enter package name, GitHub user and branch/tag
+				from scratch
+			Additional lines (if any) are default packages (from the defaultPackageList file)
+			If a package is already added to the version list, it will not appear in the Add Package list
+			
+			Tapping on one of the entries leads to the Add Package menu
 		
-		Changing the GitHub user is probably not needed. It is used more in adding a new pacakge to the system.
-		
-		Both GitHub user and GitHub branch must be set appropriately or you'll see -- for the GitHub version
-		
-		For most packages, this information fills in automatically when the package is installed
 
-		Remove Package
-			Packages that are of no interest to you may be removed from Package Manager.
-			Removed packages will no longer appear in the version list or be accessible from the Package Editor menu.
-			But you can add the package back in manually.
-		
-		Add Package
-			Package Manager includes a default list of packages. If the package of interest is not in this list
-			and you know the GitHub user and an appropriate branch or version tag, you can add the package manually.
-			The package name, GitHub user and GitHub branch must all point to a package designed for install
-			by Package Manager. More about this in the section on desigining packages.
+		Package editor:
+			This menu facilitates:
+				manual install, uninstall, package add and package remove
+				changing GitHub access information for each package
+
+			Normally, you would want to download the latest released version
+				but you may also wish to try out a beta version or revert to a previous one.
+				Once the GitHub branch is changed, PackageManager will update the GitHub version
+					and, if enabled, download this alternate version.
+
+			Remove Package
+				Packages that are of no interest to you may be removed from Package Manager.
+				Removed packages will no longer appear in the version list or be accessible from the Package Editor menu.
+				But you can add the package back in manually.
+
+		Add package menu:
+			Allows the package name, GitHub user and GitHub branch or tag to be entered.
+			
+			Pressing Proceed initiates the package add.
+			The package will be added to the package list (and appear in the Package versions menu)
+			only IF the name is unique
+			
+			Pressing Cancel returns to the default package list
+
+			All three fields must be set appropriately or you'll see -- for the GitHub version
+
 		
 		Package Manager does not allow removing packages unless they are uninstalled first.
 		
-		Package Manager does permit uninstalling SetupHelper,
+		Package Manager DOES permit uninstalling SetupHelper,
 			however this will remove the Package Manager itself.
 			Once removed, the Blind Install mechanism will be needed again !!
 
@@ -155,4 +176,4 @@ USB/SD updates:
 			Package Manager is quite content to transfer and install an older version!
 			So make sure you have the latest version especially if your GX device does not have internet access.
 
-If you are insterested in the inner workings of Setup Manager and Package Manager, read: SetupHelperDescription
+If you are insterested in the inner workings of Setup Manager and Package Manager, read: SetupHelperDescription (to be provided later)

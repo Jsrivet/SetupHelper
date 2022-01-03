@@ -1,5 +1,17 @@
-v4.0!19:
-	fixed: missing PackageManager.py from blind installl
+v4.0~20:
+	rearranged package editor menus
+		Package version list -> Active packages
+			tapping on an entry leads to Package editor
+		added Inactive packages
+			which shows only packages that are not on the system yet (or manually removed)
+			tapping on entry leads to Add package menu
+		added separate Add package menu
+		Package Editor eliminated from main menu (access through Active packages only)
+	default packages are no longer automatically added to the active package list
+
+v4.0~19:
+	fixed: venus-data.tar.gz in v2.80~18 didn't include PackageManager.py
+
 v4.0~18:
 	fixed: packages auto add/install when PackageManager is restarted
 		even if REMOVED / DO_NOT_AUTO_INSTALL was set

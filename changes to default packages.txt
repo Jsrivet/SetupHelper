@@ -1,0 +1,38 @@
+init:
+	DbusIfClass init:
+		fill in dbus default packages list from file
+
+	AddPackagesFromDbus
+	TransferOldDbusPackageInfo
+
+	AddDefaultPackages
+	AddStoredPackages
+
+
+main loop:
+	AddStoredPackages - picks up packages from Media or manual downloads
+
+
+
+init:
+	DbusIfClass init:
+		fill in local default packages list from file
+		do NOT publish to dbus !!!!!!
+
+	AddPackagesFromDbus
+	TransferOldDbusPackageInfo
+
+	AddStoredPackages
+	create initial defaultPackages list:
+		add any packages not in PackageList
+
+
+main loop:
+	AddStoredPackages - picks up packages from Media or manual downloads
+	update defaultPackages list:
+		add any packages not in PackageList
+		REMOVE any packages that ARE in PackageList
+		requires moving dbus service entries like remove package does with main list
+
+
+add "removed" packages to default list too

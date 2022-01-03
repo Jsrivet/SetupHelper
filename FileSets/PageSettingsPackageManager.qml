@@ -58,16 +58,16 @@ MbPage {
             name: qsTr ("Auto install packages")
             writeAccessLevel: User.AccessInstaller
         }
-		MbSubMenu
-        {
-            description: qsTr("Package editor")
-            subpage: Component { PageSettingsPackageEdit {} }
-            show: showControls
-        }
         MbSubMenu
         {
-            description: qsTr("Package version list")
+            description: qsTr("Active packages")
             subpage: Component { PageSettingsPackageVersions {} }
+            show: showControls
+        }
+		MbSubMenu
+        {
+            description: qsTr("Inactive packages")
+            subpage: Component { PageSettingsAddPackageList {} }
             show: showControls
         }
     }
