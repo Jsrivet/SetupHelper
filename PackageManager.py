@@ -264,7 +264,6 @@ ERROR_NO_SETUP_FILE = 		999
 #		various Gets and Sets
 #		AddPackagesFromDbus ()
 #		AddStoredPackages ()
-#		updateGitHubInfo ()
 #		AddPackage ()
 #		RemovePackage ()
 #		UpdateFileFlagsAndVersions ()
@@ -600,7 +599,14 @@ class AddRemoveClass (threading.Thread):
 				continue
 
 			if action == 'add':
-				PackageClass.AddPackage (packageName = packageName, source=source )				
+				if source == 'GUI':
+					user = DbusIf.EditPackage.GitHubUser
+					branch = DbusIf.EditPackage.GitHubBranch
+				else:
+					user = "?"
+					branch = "?"
+				PackageClass.AddPackage (packageName = packageName, source=source,
+								gitHubUser=user, gitHubBranch=branch )
 
 			elif action == 'remove':
 				PackageClass.RemovePackage ( packageName )
@@ -750,21 +756,17 @@ class DbusIfClass:
 			if transferPackages and name != None:
 				logging.warning ("moving " + name + " settings")
 
-				PackageClass.AddPackage (packageName=name, source='TRANSFER')
-
-				package = PackageClass.LocatePackage (name)
 				try:
 					user = bus.get_object("com.victronenergy.settings", (oldUserPath)).GetValue ()
 				except:
 					user = "?"
-				else:
-					package.SetGitHubUser (user)
 				try:
 					branch = bus.get_object("com.victronenergy.settings", oldBranchPath).GetValue ()
 				except:
 					branch = "?"
-				else:
-					package.SetGitHubBranch (branch)
+
+				PackageClass.AddPackage (packageName=name, source='TRANSFER',
+						gitHubUser= user, gitHubBranch=branch )
 
 			# remove the old package-related dbus Settings
 			cls.RemoveDbusSettings ( [oldNamePath, oldUserPath, oldBranchPath ] )
@@ -1055,8 +1057,6 @@ class DbusIfClass:
 #		UpdateInstallPending () (class method)
 #		AddPackagesFromDbus (class method)
 #		AddStoredPackages (class method)
-#		updateGitHubInfo (class method)
-#			called only from AddPackage because behavior depends on who added the package
 #		AddPackage (class method)
 #		RemovePackage (class method)
 #		UpdateFileFlagsAndVersions ()
@@ -1466,61 +1466,6 @@ class PackageClass:
 			if package == None:
 				PushAction (command='add:' + packageName, source='AUTO')
 	
-	# updateGitHubInfo fetchs the GitHub info and puts it in dbus settings
-	#
-	# There are three sources for this info:
-	#	GUI 'EDIT' section (only used for adds from the GUI)
-	#	the stored package (/data/<packageName>)
-	#	the default package list
-	# 
-	# the sources are prioritized in the above order
-	
-	@classmethod
-	def updateGitHubInfo (cls, packageName=None, source=None ):
-		# if adding from GUI, get info from EditPackage
-		#	check other sources if empty
-		if source == 'GUI':
-			gitHubUser = DbusIf.EditPackage.GetGitHubUser ()
-			gitHubBranch = DbusIf.EditPackage.GetGitHubBranch ()
-		# 'AUTO' source
-		else:
-			gitHubUser = ""
-			gitHubBranch = ""
-
-		# attempt to retrieve GitHub user and branch from stored pacakge
-		# update only if not already set
-		path = "/data/" + packageName + "/gitHubInfo" 
-		if os.path.isfile (path):
-			fd = open (path, 'r')
-			gitHubInfo = fd.readline().strip()
-			fd.close ()
-			parts = gitHubInfo.split(":")
-			if len (parts) >= 2:
-				if gitHubUser == "":
-					gitHubUser = parts[0]
-				if gitHubBranch == "":
-					gitHubBranch = parts[1]
-			else:
-				logging.warning (file + " gitHubInfo not formed properly " + gitHubInfo)
-
-		# finally, pull GitHub info from default package list
-		if gitHubUser == "" or gitHubBranch == "":
-			default = DbusIf.LocateDefaultPackage (packageName)
-			if default != None:
-				if gitHubUser == "":
-					gitHubUser = default[1]
-				if gitHubBranch == "":
-					gitHubBranch = default[2]
-
-		# update dbus parameters
-		DbusIf.LOCK ()
-		package = PackageClass.LocatePackage (packageName)
-		if package != None:
-			package.SetGitHubUser (gitHubUser)
-			package.SetGitHubBranch (gitHubBranch)
-		DbusIf.UNLOCK ()
-
-
 	# the DownloadPending and InstallPending flags prevent duplicate actions for the same package
 	#	and holds off reboots and GUI resets until all actions are complete
 	#
@@ -1553,7 +1498,7 @@ class PackageClass:
 	# this method is called from the GUI add package command
 
 	@classmethod
-	def AddPackage ( cls, packageName=None, source=None ):
+	def AddPackage ( cls, packageName=None, gitHubUser=None, gitHubBranch=None, source=None ):
 		if source == 'GUI':
 			reportStatusTo = 'Editor'
 		# AUTO or DEFAULT source
@@ -1580,6 +1525,16 @@ class PackageClass:
 			cls.PackageList.append( PackageClass ( section, packageName = packageName ) )
 			DbusIf.UpdatePackageCount ()
 			DbusIf.RefreshDefaultPackages = True
+
+			# add user/branch from caller
+			package = PackageClass.LocatePackage (packageName)
+			if package != None:
+				if gitHubUser == None:
+						gitHubUser = "?"
+				if gitHubBranch == None:
+						gitHubBranch = "?"
+				package.SetGitHubUser (gitHubUser)
+				package.SetGitHubBranch (gitHubBranch)
 
 			if source == 'GUI':
 				DbusIf.SetGuiEditAction ( '' )
