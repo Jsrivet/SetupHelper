@@ -11,8 +11,10 @@ MbPage {
     property string servicePrefix: "com.victronenergy.packageManager"
     VBusItem { id: downloadStatus; bind: Utils.path(servicePrefix, "/GitHubUpdateStatus") }
     VBusItem { id: installStatus; bind: Utils.path(servicePrefix, "/InstallStatus") }
-    property bool showInstallStatus: installStatus.valid && installStatus.value != ""
     VBusItem { id: mediaStatus; bind: Utils.path(servicePrefix, "/MediaUpdateStatus") }
+    VBusItem { id: actionNeeded; bind: Utils.path(servicePrefix, "/ActionNeeded") }
+    VBusItem { id: editAction; bind: Utils.path(servicePrefix, "/GuiEditAction") }
+    property bool showInstallStatus: installStatus.valid && installStatus.value != ""
     property bool showMediaStatus: mediaStatus.valid && mediaStatus.value != ""
     property bool showControls: installStatus.valid
 
@@ -69,6 +71,47 @@ MbPage {
             description: qsTr("Inactive packages")
             subpage: Component { PageSettingsAddPackageList {} }
             show: showControls
+        }
+        MbOK
+        {
+            id: finishButton
+            description:
+            {
+				if (editAction.value == 'reboot')
+					return qsTr ("REBOOTING ...")
+				else if (editAction.value == 'guiRestart')
+					return qsTr ("restarting GUI ...")
+				else
+					return qsTr ("action to finish install/uninstall")
+			}
+            value:
+             {
+				if (! actionNeeded.valid)
+					return ""
+				else if (actionNeeded.value == 'reboot')
+					return qsTr ("Reboot")
+				else if (actionNeeded.value == 'guiRestart')
+					return qsTr ("Restart GUI")
+				else
+					return ""
+			}
+			onClicked:
+            {
+				if (actionNeeded.value == 'reboot')
+				{
+					// needs immediate update because GUI will be going down ASAP
+					finishButton.description = qsTr ("REBOOTING ...")
+					editAction.setValue ( 'reboot' )
+				}
+				else if (actionNeeded.value == 'guiRestart')
+				{
+					// needs immediate update because GUI will be going down ASAP
+					finishButton.description = qsTr ("restarting GUI ...")
+					editAction.setValue ( 'restartGui' )
+				}
+			}
+            show: actionNeeded.valid && actionNeeded.value != ''
+            writeAccessLevel: User.AccessInstaller
         }
     }
 }

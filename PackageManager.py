@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-# TODO: How do manually trigger deferred ("Later") reboot/GUI restart?
+#
 #	PackageManager.py
 #	Kevin Windrem
 #
@@ -135,6 +135,13 @@ ERROR_NO_SETUP_FILE = 		999
 #									raspberrypi2	Raspberry Pi 2/3
 #									raspberrypi4	Raspberry Pi 4
 #
+#		/ActionNeeded				informs GUI if further action is needed following a manual operation
+#									the operator has the option to defer reboots and GUI restarts (by choosing "Later)
+#			''				no action needed
+#			'reboot'		reboot needed
+#			'guiRestart'	GUI restart needed
+#
+#			the GUI can respond by setting /GuiEditAction to 'reboot' or 'restartGui'
 #
 # /Settings/PackageVersion/Edit/ is a section for the GUI to provide information about the a new package to be added
 #
@@ -884,6 +891,9 @@ class DbusIfClass:
 	def SetEditStatus (self, message):
 		self.DbusService['/GuiEditStatus'] = message
 
+	def SetActionNeeded (self, message):
+		self.DbusService['/ActionNeeded'] = message
+
 	# search default package list for packageName
 	# and return the pointer if found
 	#	otherwise return None
@@ -1032,6 +1042,12 @@ class DbusIfClass:
 		self.DbusService.add_path ( "/Default/0/PackageName", "new" )
 		self.DbusService.add_path ( "/Default/0/GitHubUser", "" )
 		self.DbusService.add_path ( "/Default/0/GitHubBranch", "" )
+
+		# used to notify the GUI that an action is required to complete a manual installation
+		#	the operator has the option to defer reboot and GUI restart operations
+		#	if they do, this parameter is set and a button appears on the main Package manager menu
+
+		self.DbusService.add_path ( "/ActionNeeded", '' )
 
 		self.RefreshDefaultPackages = False
 
@@ -1277,7 +1293,7 @@ class PackageClass:
 				DbusIf.DbusService[self.rebootNeededPath] = 0
 	def SetGuiRestartNeeded (self, value):
 		self.GuiRestartNeeded = value
-		if self.rebootNeededPath != "":
+		if self.guiRestartNeededPath != "":
 			if value == True:
 				DbusIf.DbusService[self.guiRestartNeededPath] = 1
 			else:
@@ -2683,7 +2699,6 @@ def mainLoop():
 	global AllVersionsRefreshed  # initialized in main - set in UpdateGitHubVersion 
 	global lastDownloadMode # initialized in main
 	global currentDownloadMode # initialized in main
-	t4 = time.time()####
 
 	delayStart = 0.0
 
@@ -2733,12 +2748,20 @@ def mainLoop():
 		actionsPending = True
 
 	# no actions for this package, check other packages before looking for reboot or GUI restart
-	if not actionsPending:
-		for package in PackageClass.PackageList:
-			if package.DownloadPending or package.InstallPending:
-				actionsPending = True
-				break
+	rebootNeeded = False
+	guiRestartNeeded = False
+	for package in PackageClass.PackageList:
+		if package.DownloadPending or package.InstallPending:
+			actionsPending = True
+		if package.GuiRestartNeeded:
+			guiRestartNeeded = True
+		if package.RebootNeeded:
+			rebootNeeded = True
 	DbusIf.UNLOCK ()
+	if rebootNeeded:
+		DbusIf.SetActionNeeded ('reboot')
+	elif guiRestartNeeded:
+		DbusIf.SetActionNeeded ('guiRestart')
 
 	if not actionsPending:
 		if SystemReboot:
@@ -2755,9 +2778,12 @@ def mainLoop():
 			DbusIf.SetInstallStatus ("")
 			DbusIf.SetEditStatus ("")
 			DbusIf.SetGuiEditAction ('')
-
-	t5 = time.time()####
-####	print ("#### main loop times  total %0.4f" % (t5 - t4) )
+			# clear all package GUI restart needed flags
+			# that flag is only used by the GUI to show a restart is needed for that package
+			for package in PackageClass.PackageList:
+				package.SetGuiRestartNeeded (False)
+			# the ActionNeeded flag could be 'reboot' but that's addressed in main below anyway
+			DbusIf.SetActionNeeded ('')
 
 	# continue the main loop
 	return True

@@ -1,3 +1,5 @@
+//////// new for PackageManager
+
 import QtQuick 1.1
 import com.victron.velib 1.0
 import "utils.js" as Utils

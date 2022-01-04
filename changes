@@ -1,5 +1,14 @@
+v4.0~24:
+	add Reboot/GUI restart button to Package Manager main menu
+	to address deferred operations ("Later")
+
+v4.0~23:
+	fixed: GUI restart not happening after auto install
+	fixed: GUI restart notificaiton in menu not cleared after GUI restart
+v4.0~22: not used
 v4.0~21:
 	fixed: adding package didn't carry over GitHub user and branch
+
 v4.0~20:
 	rearranged package editor menus
 		Package version list -> Active packages

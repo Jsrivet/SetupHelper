@@ -239,7 +239,7 @@ MbPage {
         {
             id: removeButton
             width: 170
-            anchors { right: parent.right; bottom: removeButton.bottom }
+            anchors { right: parent.right}
             description: ""
             value: qsTr("Remove package")
             onClicked: remove ()
