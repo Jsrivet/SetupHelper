@@ -1,9 +1,14 @@
+v4.0~26:
+	fixed: Large features not appearing
+	fixed: typo in 123SmartBMS-Venus in defaultPackageList
+
 v4.0~25:
 	handle nonexistant package directory
 	pull GitHub user/branch from package directory file
 	optimize AddStoredPackages so it can run all the time
 		(some updates were being missed)
 	changed default package name: smartbms-venus to 123SmartBMS-Venus
+
 v4.0~24:
 	add Reboot/GUI restart button to Package Manager main menu
 		to address deferred operations ("Later")

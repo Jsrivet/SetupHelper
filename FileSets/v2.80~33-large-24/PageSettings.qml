@@ -170,19 +170,17 @@ MbPage {
 			subpage: ioSettings
 			show: ioSettings.haveSubMenus
 			PageSettingsIo { id: ioSettings }
-		}
-
-		MbSubMenu {
-			description: qsTr("Backup & Restore")
-			subpage: Component { PageSettingsBackup {} }
-		}
-
 		/*
 		MbSubMenu {
 			description: qsTr("Backup & Restore")
 			subpage: Component { PageSettingsBackup {} }
 		}
 		*/
+		MbSubMenu {
+			description: qsTr("Venus OS Large features")
+			subpage: Component { PageSettingsLarge {} }
+			show: vePlatform.serviceExists("signalk-server")
+		}
 
 //////// added for package control and version display
         MbSubMenu
