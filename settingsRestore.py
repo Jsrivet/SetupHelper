@@ -28,9 +28,12 @@ bus = dbus.SystemBus()
 t0 = time.time()
 with open ("/data/SetupHelper/settings", 'r') as fd:
 	for line in fd:
-		parts = line.strip().split (':')
+		parts = line.strip().split ('=')
 
-		bus.get_object("com.victronenergy.settings", parts[0]).SetValue(parts[1])
+		try:
+			bus.get_object("com.victronenergy.settings", parts[0]).SetValue(parts[1])
+		except:
+			pass
 
 t1 = time.time()
 print ("restore settings time %03f" % (t1 - t0))

@@ -1,6 +1,12 @@
+v4.0~25:
+	handle nonexistant package directory
+	pull GitHub user/branch from package directory file
+	optimize AddStoredPackages so it can run all the time
+		(some updates were being missed)
+	changed default package name: smartbms-venus to 123SmartBMS-Venus
 v4.0~24:
 	add Reboot/GUI restart button to Package Manager main menu
-	to address deferred operations ("Later")
+		to address deferred operations ("Later")
 
 v4.0~23:
 	fixed: GUI restart not happening after auto install

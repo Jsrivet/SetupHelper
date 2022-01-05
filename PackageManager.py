@@ -252,7 +252,8 @@ ERROR_NO_SETUP_FILE = 		999
 #		DbusIf
 #			SetGuiEditAction ()
 #			UpdateStatus ()
-#			LocateDefaultPackage ()handleGuiEditAction
+#			LocateRawDefaultPackage ()
+#			handleGuiEditAction
 #			 ()
 #			UpdatePackageCount ()
 #			various Gets and Sets for dbus parameters
@@ -606,12 +607,33 @@ class AddRemoveClass (threading.Thread):
 				continue
 
 			if action == 'add':
+				packageDir = "/data/" + packageName
 				if source == 'GUI':
 					user = DbusIf.EditPackage.GitHubUser
 					branch = DbusIf.EditPackage.GitHubBranch
 				else:
-					user = "?"
-					branch = "?"
+					user = ""
+					branch = ""
+				# try to get GitHub info from package directory
+				if user == "":
+					if os.path.isdir (packageDir):
+						gitHubInfoFile = packageDir + "/gitHubInfo"
+						try:
+							fd = open (gitHubInfoFile, 'r')
+							parts = fd.readline().strip ()
+							fd.close()
+						except:
+							parts = ""
+						if len (parts) >= 2:
+							user = parts[0]
+							branch = parts[1]
+				# still nothing - try to get GitHub info from default package list
+				if user == "":
+					default = DbusIf.LocateRawDefaultPackage (packageName)
+					if default != None:
+						user = default[1]
+						branch = default[2]
+
 				PackageClass.AddPackage (packageName = packageName, source=source,
 								gitHubUser=user, gitHubBranch=branch )
 
@@ -632,7 +654,7 @@ class AddRemoveClass (threading.Thread):
 #	Methods:
 #		SetGuiEditAction
 #		UpdateStatus
-#		LocateDefaultPackage
+#		LocateRawDefaultPackage
 #		handleGuiEditAction
 #		UpdatePackageCount
 #		RemoveDbusSettings
@@ -671,7 +693,7 @@ class AddRemoveClass (threading.Thread):
 # default package info is fetched from a file and published to our dbus service
 #	for use by the GUI in adding new packages
 #	it the default info is also stored in DefaultPackages
-#	LocateDefaultPackage is used to retrieve the default from local storage
+#	LocateRawDefaultPackage is used to retrieve the default from local storage
 #		rather than pulling from dbus or reading the file again
 
 class DbusIfClass:
@@ -716,7 +738,7 @@ class DbusIfClass:
 	#	TransferOldDbusPackageInfo
 	# PackageManager dbus storage was moved
 	# from ...PackageMonitor... to ...PackageManager...
-	# this method moves the info to the new location and deleted the old Settings
+	# this method moves the info to the new location and deletes the old Settings
 	# this assumes the new dbus environment is already set up
 	# the transfer is only done if the new location has no packages
 	# should only be called from initialization so we don't LOCK while accessing the package list
@@ -894,23 +916,22 @@ class DbusIfClass:
 	def SetActionNeeded (self, message):
 		self.DbusService['/ActionNeeded'] = message
 
-	# search default package list for packageName
+	# search RAW default package list for packageName
 	# and return the pointer if found
 	#	otherwise return None
 	#
-	# Note: this method should be called with LOCK () set
-	#	and use the returned value before UNLOCK ()
-	#	to avoid unpredictable results
+	# Note: the raw default package list is built during init
+	#	then never changes so LOCK/UNLOCK is NOT needed
 	#
-	# DefaultPackages is a list of tuples:
+	# rawDefaultPackages is a list of tuples:
 	#	(packageName, gitHubUser, gitHubBranch)
 	#
 	# if a packageName match is found, the tuple is returned
 	#	otherwise None is retuned
 
-	def LocateDefaultPackage (self, packageName):
+	def LocateRawDefaultPackage (self, packageName):
 		
-		for default in self.defaultPackageList:
+		for default in self.rawDefaultPackages:
 			if packageName == default[0]:
 				return default
 		return None
@@ -1105,10 +1126,6 @@ class PackageClass:
 	# list of instantiated Packages
 	PackageList = []
 
-	# the last modification time of /data
-	# used to skip AddStoredPackages if nothing is changed
-	lastDataModTime = 0
-
 	# search PackageList for packageName
 	# and return the package pointer if found
 	#	otherwise return None
@@ -1201,6 +1218,12 @@ class PackageClass:
 			logging.error ("MoveFlagFiles - no packageName")
 			return
 
+		# nothing to do if package directory doesn't exist
+		packageDir = "/data/" + packageName
+		if not os.path.isdir (packageDir):
+			logging.error ("MoveFlagFiles  - no package directory", packageName)
+			return
+
 		# create setupOptions directory if it doesn't already exist
 		#	this would happen if the package was being added / installed for the first time
 		optionsPath = "/data/setupOptions/" + packageName
@@ -1208,14 +1231,14 @@ class PackageClass:
 			os.mkdir (optionsPath)
 
 		# move auto add block flag
-		oldFlag = "/data/" + packageName+ "/REMOVED"
+		oldFlag = packageDir + "/REMOVED"
 		flagFile = optionsPath +  "/DO_NOT_AUTO_ADD"
 		if os.path.exists (oldFlag):
 			open (flagFile, 'a').close()
 			os.remove (oldFlag)
 
 		# move auto install block flag
-		oldFlag = "/data/" + packageName+ "/DO_NOT_AUTO_INSTALL"
+		oldFlag = packageDir + "/DO_NOT_AUTO_INSTALL"
 		flagFile = optionsPath +  "/DO_NOT_AUTO_INSTALL"
 		if os.path.exists (oldFlag):
 			open (flagFile, 'a').close()
@@ -1423,14 +1446,14 @@ class PackageClass:
 
 
 	#	AddStoredPackages
-	# packages stored in /data must also be added to the package list
+	# add packages stored in /data to the package list
 	# in order to qualify as a package:
 	#	must be a directory
 	#	name must not contain strings in the rejectList
 	#	name must not include any spaces
 	#	diretory must contain a file named version
 	#	first character of version file must be 'v'
-	#	name must be unique  - that is not match any existing packages
+	#	name must be unique - that is not match any existing packages
 
 	rejectList = [ "-current", "-latest", "-main", "-test", "-debug", "-beta", "-backup1", "-backup2",
 					"-0", "-1", "-2", "-3", "-4", "-5", "-6", "-7", "-8", "-9", " " ]
@@ -1438,32 +1461,17 @@ class PackageClass:
 	@classmethod
 	def AddStoredPackages (cls):
 
-		# skip all checks if /data has not been modified since the last check
-		modTime = os.stat("/data").st_mtime
-		if modTime == cls.lastDataModTime:
-			return
-		cls.lastDataModTime = modTime
-
-		for path in glob.iglob ("/data/*"):
-			packageName = os.path.basename (path)
-			if os.path.isdir (path) == False:
+		t0 = time.time() ####
+		for path in os.listdir ("/data"):
+			if not os.path.isdir (path):
 				continue
+			packageName = os.path.basename (path)
 			rejected = False
 			for reject in cls.rejectList:
 				if reject in packageName:
 					rejected = True
 					break
 			if rejected:
-				continue
-			versionFile = path + "/version"
-			if os.path.isfile (versionFile) == False:
-				continue
-			fd = open (versionFile, 'r')
-			version = fd.readline().strip()
-			fd.close ()
-
-			if version[0] != 'v':
-				logging.warning  (packageName + " version rejected " + version)
 				continue
 
 			# skip if package was manually removed
@@ -1475,12 +1483,24 @@ class PackageClass:
 			if os.path.exists (path + "/raspberryPiOnly") and Platform[0:4] != 'Rasp':
 				continue
 
+			versionFile = path + "/version"
+			try:
+				fd = open (versionFile, 'r')
+				version = fd.readline().strip()
+				fd.close ()
+			except:
+				continue
+			if version[0] != 'v':
+				continue
+
 			# continue only if package is unique
 			DbusIf.LOCK ()
 			package = cls.LocatePackage (packageName)
 			DbusIf.UNLOCK ()			
 			if package == None:
 				PushAction (command='add:' + packageName, source='AUTO')
+		t1 = time.time()
+####		print ("#### AddStoredPackages %0.6f" % (t1 - t0) )
 	
 	# the DownloadPending and InstallPending flags prevent duplicate actions for the same package
 	#	and holds off reboots and GUI resets until all actions are complete
@@ -1705,14 +1725,23 @@ class PackageClass:
 		self.SetInstalledVersion (installedVersion)
 
 		packageDir = "/data/" + packageName
+
+		# no package directory - null out all params
+		if not os.path.isdir (packageDir):
+			logging.error ("UpdateFileFlagsAndVersions - no package directory", packageName)
+			installedVersion = ""
+			packageVersion = ""
+			self.AutoInstallOk = False
+			self.SetIncompatible ('')
+			return
+
 		# fetch package version (the one in /data/packageName)
 		try:
 			versionFile = open (packageDir + "/version", 'r')
-		except:
-			packageVersion = ""
-		else:
 			packageVersion = versionFile.readline().strip()
 			versionFile.close()
+		except:
+			packageVersion = ""
 		self.SetPackageVersion (packageVersion)
 
 		# set the incompatible parameter
@@ -2022,7 +2051,6 @@ class DownloadGitHubPackagesClass (threading.Thread):
 		if os.path.exists (tempDirectory):
 			shutil.rmtree (tempDirectory)
 		os.mkdir (tempDirectory)
-		packagePath = "/data/" + packageName
 
 		DbusIf.LOCK ()
 		package = PackageClass.LocatePackage (packageName)
@@ -2313,7 +2341,13 @@ class InstallPackagesClass (threading.Thread):
 		elif source == 'AUTO':
 			sendStatusTo = 'Install'
 
-		setupFile = "/data/" + packageName + "/setup"
+		packageDir = "/data/" + packageName
+		if not os.path.isdir (packageDir):
+			logging.error ("InstallPackage - no package directory", packageName)
+			DbusIf.UNLOCK ()
+			return
+			
+		setupFile = packageDir + "/setup"
 		if os.path.isfile(setupFile):
 			if os.access(setupFile, os.X_OK) == False:
 				DbusIf.UpdateStatus ( message="setup file for " + packageName + " not executable",
@@ -2904,9 +2938,9 @@ def main():
 	lastDownloadMode = AUTO_DOWNLOADS_OFF
 	currentDownloadMode = AUTO_DOWNLOADS_OFF
 
-	# call the main loop - every 1 seconds
+	# call the main loop - every 2 seconds
 	# this section of code loops until mainloop quits
-	GLib.timeout_add(1000, mainLoop)
+	GLib.timeout_add(2000, mainLoop)
 	mainloop = GLib.MainLoop()
 	mainloop.run()
 
